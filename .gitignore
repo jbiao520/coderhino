@@ -1,0 +1,19 @@
+/target/
+/.settings/
+/.idea/
+/.sisyphus/
+/.classpath
+/.coderhino-tasks.json
+/.project
+/.planning/phases/05-tool-coverage/05-01-PLAN.md
+/.coderhino/analytics-events.jsonl
+
+# Frontend build artifacts
+src/main/client/node_modules/
+src/main/client/node/
+src/main/client/dist/
+target/classes/static/
+/.coderhino/
+/.playwright-mcp/
+/.opencode/
+/openspec/changes/
