@@ -13,6 +13,8 @@ import FilePanel from '../components/FilePanel';
 import FileTabBar from '../components/FileTabBar';
 import FileAutocomplete from '../components/FileAutocomplete';
 import CommandPalette from '../components/CommandPalette';
+import { Popup } from '../components/Popup';
+import RichMessageContent from '../components/RichMessageContent';
 import StructuredMessage from '../components/StructuredMessage';
 import TerminalPanel from '../components/TerminalPanel';
 import SessionContextPanel from '../components/SessionContextPanel';
@@ -33,7 +35,7 @@ import { getChatFontScopeStyle } from '../lib/webUiFontSettings';
 import { getCaretCoordinates } from '../utils/caretPosition';
 import type { CommandDto, FileContent, FileNode, ModelOptionDto, ProviderOptionDto, ReferenceDto, SessionContextDto, SessionGitDiffDto, SessionGitEntryDto, SessionGitStatusDto, WebSettings } from '../types/api';
 
-type ToolbarMenu = 'intent' | 'provider-model' | 'model-mode' | 'reference';
+type ToolbarMenu = 'intent' | 'provider-model' | 'model-mode';
 type ChatPanelTabId = 'tree' | 'context' | 'git' | string;
 type ReadPlaybackStatus = 'idle' | 'generating' | 'ready' | 'playing' | 'paused' | 'ended' | 'error';
 
@@ -47,6 +49,7 @@ interface ReadPlaybackState {
 
 const TOOLBAR_MENU_ROW_HEIGHT = 32;
 const TOOLBAR_MENU_PADDING = 16;
+const REFERENCE_PAGE_SIZE = 12;
 const READ_PLAYBACK_STORAGE_KEY = 'coderhino-read-playback';
 const MESSAGES_AUTO_FOLLOW_THRESHOLD_PX = 48;
 function createReadPlaybackState(overrides: Partial<ReadPlaybackState> = {}): ReadPlaybackState {
@@ -366,6 +369,10 @@ export default function ChatPage({
   const [activeMessageActionId, setActiveMessageActionId] = useState<string | null>(null);
   const [commands, setCommands] = useState<CommandDto[]>([]);
   const [references, setReferences] = useState<ReferenceDto[]>([]);
+  const [referenceBrowserOpen, setReferenceBrowserOpen] = useState(false);
+  const [referenceSearchQuery, setReferenceSearchQuery] = useState('');
+  const [referencePage, setReferencePage] = useState(0);
+  const [referencePreviewId, setReferencePreviewId] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [editingName, setEditingName] = useState(false);
@@ -668,6 +675,23 @@ export default function ChatPage({
     return fallbackModelOptions(providerMenuProvider.models, session?.model, session?.availableModelModes);
   }, [providerMenuProvider, session?.availableModelModes, session?.model]);
 
+  const normalizedReferenceSearchQuery = referenceSearchQuery.trim().toLowerCase();
+  const filteredReferences = useMemo(() => {
+    if (normalizedReferenceSearchQuery.length === 0) {
+      return references;
+    }
+    return references.filter((reference) =>
+      reference.label.toLowerCase().includes(normalizedReferenceSearchQuery));
+  }, [normalizedReferenceSearchQuery, references]);
+  const referencePageCount = Math.max(1, Math.ceil(filteredReferences.length / REFERENCE_PAGE_SIZE));
+  const visibleReferences = useMemo(() => {
+    const start = referencePage * REFERENCE_PAGE_SIZE;
+    return filteredReferences.slice(start, start + REFERENCE_PAGE_SIZE);
+  }, [filteredReferences, referencePage]);
+  const referencePreview = useMemo(() => (
+    references.find((reference) => reference.id === referencePreviewId) ?? null
+  ), [referencePreviewId, references]);
+
   useEffect(() => {
     if (!selectedProviderId && session?.availableProviders && session.availableProviders.length > 0) {
       setSelectedProviderId(session.availableProviders[0]!.id);
@@ -694,6 +718,14 @@ export default function ChatPage({
       setProviderMenuProviderId(selectedProviderId ?? session.availableProviders[0]!.id);
     }
   }, [providerMenuProviderId, selectedProviderId, session?.availableProviders]);
+
+  useEffect(() => {
+    setReferencePage(0);
+  }, [normalizedReferenceSearchQuery]);
+
+  useEffect(() => {
+    setReferencePage((current) => Math.min(current, referencePageCount - 1));
+  }, [referencePageCount]);
 
   useEffect(() => {
     if (!projectId) {
@@ -935,8 +967,34 @@ export default function ChatPage({
   }, [dismissAutocomplete, inputValue]);
 
   const handleReferenceSelect = useCallback((reference: ReferenceDto) => {
+    setReferencePreviewId(null);
+    setReferenceBrowserOpen(false);
     insertTextAtSelection(reference.markdown);
   }, [insertTextAtSelection]);
+
+  const handleOpenReferenceBrowser = useCallback(() => {
+    setReferenceSearchQuery('');
+    setReferencePage(0);
+    setReferencePreviewId(null);
+    setReferenceBrowserOpen(true);
+    setOpenToolbarMenu(null);
+    dismissAutocomplete();
+    setPaletteOpen(false);
+    setPaletteQuery('');
+  }, [dismissAutocomplete]);
+
+  const handleCloseReferenceBrowser = useCallback(() => {
+    setReferenceBrowserOpen(false);
+    setReferencePreviewId(null);
+  }, []);
+
+  const handleOpenReferencePreview = useCallback((referenceId: string) => {
+    setReferencePreviewId(referenceId);
+  }, []);
+
+  const handleCloseReferencePreview = useCallback(() => {
+    setReferencePreviewId(null);
+  }, []);
 
   const releaseReadAudio = useCallback(async (token: string | null) => {
     if (!token) {
@@ -1271,14 +1329,14 @@ export default function ChatPage({
       const triggerRect = trigger.getBoundingClientRect();
       const rowCount = menu === 'provider-model'
         ? Math.max((session?.availableProviders?.length ?? 0), providerMenuModelOptions.length + 1)
-        : (menu === 'model-mode' ? modelModeOptions.length : (menu === 'reference' ? Math.max(references.length, 1) : 2));
+        : (menu === 'model-mode' ? modelModeOptions.length : 2);
       const estimatedMenuHeight = rowCount * TOOLBAR_MENU_ROW_HEIGHT + TOOLBAR_MENU_PADDING;
       const spaceBelow = window.innerHeight - triggerRect.bottom;
       const spaceAbove = triggerRect.top;
       setOpenToolbarMenuAbove(spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow);
     }
     setOpenToolbarMenu(next);
-  }, [modelModeOptions.length, openToolbarMenu, providerMenuModelOptions.length, references.length, selectedProviderId, session?.availableProviders]);
+  }, [modelModeOptions.length, openToolbarMenu, providerMenuModelOptions.length, selectedProviderId, session?.availableProviders]);
 
   const handleClosePanelTab = useCallback((tabId: string) => {
     if (tabId === 'context') {
@@ -2114,31 +2172,13 @@ export default function ChatPage({
                 type="button"
                 className="btn btn-ghost"
                 style={styles.dropdownTrigger(isRunning)}
-                onClick={(e) => toggleToolbarMenu('reference', e.currentTarget)}
+                onClick={handleOpenReferenceBrowser}
                 disabled={isRunning}
                 data-testid="composer-reference-trigger"
               >
                 <span>Reference</span>
                 <span style={styles.dropdownChevron}><ChevronDownIcon size={14} /></span>
               </button>
-              {openToolbarMenu === 'reference' && (
-                <div style={styles.dropdownMenu(openToolbarMenuAbove)} data-testid="composer-reference-menu">
-                  {references.length === 0 ? (
-                    <div style={styles.dropdownEmptyState} data-testid="composer-reference-empty">No references available</div>
-                  ) : references.map((reference) => (
-                    <button
-                      key={reference.id}
-                      type="button"
-                      className="btn btn-ghost"
-                      style={styles.dropdownOption(false)}
-                      onClick={() => handleReferenceSelect(reference)}
-                      data-testid={`composer-reference-option-${toTestIdFragment(reference.id)}`}
-                    >
-                      {reference.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </form>
@@ -2227,6 +2267,116 @@ export default function ChatPage({
         }}
         onClose={handleCloseGitDiff}
       />
+      <Popup
+        isOpen={referenceBrowserOpen}
+        onClose={handleCloseReferenceBrowser}
+        title="References"
+        contentStyle={styles.referenceBrowserModal}
+        bodyStyle={styles.referenceBrowserBody}
+      >
+        <div style={styles.referenceBrowserRoot} data-testid="composer-reference-browser">
+          <div style={styles.referenceSearchRow}>
+            <input
+              className="input-field"
+              type="text"
+              value={referenceSearchQuery}
+              onChange={(event) => setReferenceSearchQuery(event.target.value)}
+              placeholder="Search references by title"
+              style={styles.referenceSearchInput}
+              data-testid="composer-reference-search"
+              aria-label="Search references"
+              data-autofocus="true"
+            />
+          </div>
+          {references.length === 0 ? (
+            <div style={styles.referenceEmptyState} data-testid="composer-reference-empty">
+              No references available
+            </div>
+          ) : filteredReferences.length === 0 ? (
+            <div style={styles.referenceEmptyState} data-testid="composer-reference-no-results">
+              No references match your search
+            </div>
+          ) : (
+            <>
+              <div style={styles.referenceResultsList} data-testid="composer-reference-results">
+                {visibleReferences.map((reference) => (
+                  <div
+                    key={reference.id}
+                    style={styles.referenceRow}
+                    data-testid={`composer-reference-row-${toTestIdFragment(reference.id)}`}
+                  >
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={styles.referenceSelectButton}
+                      onClick={() => handleReferenceSelect(reference)}
+                      data-testid={`composer-reference-option-${toTestIdFragment(reference.id)}`}
+                    >
+                      <span style={styles.referenceRowLabel}>{reference.label}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={styles.referencePreviewButton}
+                      onClick={() => handleOpenReferencePreview(reference.id)}
+                      data-testid={`composer-reference-preview-${toTestIdFragment(reference.id)}`}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {referencePageCount > 1 ? (
+                <div style={styles.referencePagination}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={styles.referencePageButton(referencePage === 0)}
+                    onClick={() => setReferencePage((current) => Math.max(current - 1, 0))}
+                    disabled={referencePage === 0}
+                    data-testid="composer-reference-page-prev"
+                  >
+                    Previous
+                  </button>
+                  <span style={styles.referencePaginationStatus} data-testid="composer-reference-page-status">
+                    Page {referencePage + 1} of {referencePageCount}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={styles.referencePageButton(referencePage >= referencePageCount - 1)}
+                    onClick={() => setReferencePage((current) => Math.min(current + 1, referencePageCount - 1))}
+                    disabled={referencePage >= referencePageCount - 1}
+                    data-testid="composer-reference-page-next"
+                  >
+                    Next
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </Popup>
+      <Popup
+        isOpen={referencePreview != null}
+        onClose={handleCloseReferencePreview}
+        headerContent={(
+          <div style={styles.referencePreviewHeader}>
+            <div style={styles.referencePreviewTitle}>{referencePreview?.label ?? 'Reference preview'}</div>
+            <code style={styles.referencePreviewMeta}>{referencePreview?.id ?? 'reference'}.md</code>
+          </div>
+        )}
+        contentStyle={styles.referencePreviewModal}
+        bodyStyle={styles.referencePreviewBody}
+      >
+        <div style={styles.referencePreviewContent} data-testid="composer-reference-preview-modal">
+          {referencePreview ? (
+            <RichMessageContent text={referencePreview.markdown} />
+          ) : (
+            <div style={styles.referenceEmptyState}>Reference preview unavailable.</div>
+          )}
+        </div>
+      </Popup>
     </div>
   );
 }
@@ -2904,6 +3054,140 @@ const styles = {
     padding: '6px 8px',
     fontSize: 'calc(var(--chat-font-size) - 2px)',
     color: 'var(--text-muted)',
+  } as React.CSSProperties,
+  referenceBrowserModal: {
+    width: 'min(92vw, 640px)',
+    maxHeight: 'min(84vh, 820px)',
+  } as React.CSSProperties,
+  referenceBrowserBody: {
+    padding: 0,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    overflow: 'hidden',
+  } as React.CSSProperties,
+  referenceBrowserRoot: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    minHeight: 260,
+  } as React.CSSProperties,
+  referenceSearchRow: {
+    padding: '12px 16px 10px',
+    borderBottom: '1px solid var(--border)',
+  } as React.CSSProperties,
+  referenceSearchInput: {
+    width: '100%',
+    background: 'var(--bg)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    color: 'var(--text)',
+    fontFamily: 'var(--chat-font-family)',
+    fontSize: 'var(--chat-font-size)',
+    padding: '8px 10px',
+    boxSizing: 'border-box' as const,
+  } as React.CSSProperties,
+  referenceResultsList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+    padding: '8px 10px',
+    overflowY: 'auto' as const,
+    flex: 1,
+  } as React.CSSProperties,
+  referenceRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    gap: 8,
+    alignItems: 'center',
+  } as React.CSSProperties,
+  referenceSelectButton: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    minWidth: 0,
+    padding: '6px 8px',
+    borderRadius: 'var(--radius-sm)',
+    border: '1px solid transparent',
+    background: 'transparent',
+    textAlign: 'left' as const,
+  } as React.CSSProperties,
+  referenceRowLabel: {
+    display: 'block',
+    width: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    fontSize: 'calc(var(--chat-font-size) - 1px)',
+    fontWeight: 600,
+    color: 'var(--text)',
+  } as React.CSSProperties,
+  referencePreviewButton: {
+    minWidth: 72,
+    padding: '4px 10px',
+    borderRadius: 'var(--radius-sm)',
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--text)',
+    fontSize: 'calc(var(--chat-font-size) - 3px)',
+    fontWeight: 600,
+  } as React.CSSProperties,
+  referenceEmptyState: {
+    padding: '24px 16px',
+    color: 'var(--text-muted)',
+    fontSize: 'calc(var(--chat-font-size) - 1px)',
+    textAlign: 'center' as const,
+  } as React.CSSProperties,
+  referencePagination: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    padding: '8px 12px 10px',
+    borderTop: '1px solid var(--border)',
+  } as React.CSSProperties,
+  referencePageButton: (disabled: boolean) => ({
+    minWidth: 72,
+    padding: '4px 10px',
+    borderRadius: 'var(--radius-sm)',
+    border: '1px solid var(--border)',
+    color: disabled ? 'var(--text-muted)' : 'var(--text)',
+    background: disabled ? 'var(--bg)' : 'var(--surface)',
+    fontSize: 'calc(var(--chat-font-size) - 3px)',
+  }) as React.CSSProperties,
+  referencePaginationStatus: {
+    fontSize: 'calc(var(--chat-font-size) - 3px)',
+    color: 'var(--text-muted)',
+    fontWeight: 600,
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
+  referencePreviewModal: {
+    width: 'min(92vw, 840px)',
+    maxHeight: 'min(88vh, 960px)',
+  } as React.CSSProperties,
+  referencePreviewBody: {
+    padding: 0,
+    overflow: 'hidden',
+  } as React.CSSProperties,
+  referencePreviewHeader: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 6,
+    minWidth: 0,
+  } as React.CSSProperties,
+  referencePreviewTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    color: 'var(--text)',
+  } as React.CSSProperties,
+  referencePreviewMeta: {
+    fontSize: 12,
+    color: 'var(--text-muted)',
+    fontFamily: 'var(--font-mono)',
+    wordBreak: 'break-word' as const,
+  } as React.CSSProperties,
+  referencePreviewContent: {
+    padding: '16px 20px 20px',
+    overflowY: 'auto' as const,
+    maxHeight: '70vh',
   } as React.CSSProperties,
   providerModelTriggerText: {
     overflow: 'hidden',

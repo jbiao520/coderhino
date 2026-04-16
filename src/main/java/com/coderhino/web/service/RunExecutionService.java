@@ -86,24 +86,17 @@ public class RunExecutionService {
         try {
             var config = createProviderConfigResolver().resolve(session.getProviderId(), session.getAppState().model());
             var modelClient = createModelClient(config);
-            var engine = new QueryEngine(
-                ToolRegistry.createDefault(),
-                modelClient,
-                new com.coderhino.permissions.PermissionChecker(),
-                new com.coderhino.context.ContextCollector(),
-                serviceRegistry,
-                null,
-                WEB_RESPONSE_FORMAT_PROMPT
-            );
+            var engine = createQueryEngine(config, modelClient);
+            com.coderhino.query.QueryResult result;
             try (var ignored = TaskOriginContext.open(projectId, session.getSessionId())) {
-                engine.execute(session.getBootstrapState(), input, visiblePrompt, sink);
+                result = engine.execute(session.getBootstrapState(), input, visiblePrompt, sink);
             }
             if (sink.isCancelled()) {
                 return;
             }
             if (runId.equals(session.getActiveRunId())) {
                 completionNotificationStore.recordAiRunCompletion(runId, session.getSessionId(), projectId, java.time.Instant.now());
-                session.setCurrentRunStatus(RunDto.RunStatus.COMPLETED);
+                session.setCurrentRunStatus(result.isError() ? RunDto.RunStatus.FAILED : RunDto.RunStatus.COMPLETED);
                 session.getActiveRun().set(false);
                 session.setActiveRunId(null);
                 session.clearActiveRunReplay();
@@ -173,6 +166,18 @@ public class RunExecutionService {
             config.getBaseUrl(),
             config.getApiType(),
             config.getContextWindow()
+        );
+    }
+
+    protected QueryEngine createQueryEngine(ProviderConfigResolver.ResolvedConfig config, ModelClient modelClient) {
+        return new QueryEngine(
+            ToolRegistry.createDefault(),
+            modelClient,
+            new com.coderhino.permissions.PermissionChecker(),
+            new com.coderhino.context.ContextCollector(),
+            serviceRegistry,
+            null,
+            WEB_RESPONSE_FORMAT_PROMPT
         );
     }
 }

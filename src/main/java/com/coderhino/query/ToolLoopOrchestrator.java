@@ -38,7 +38,6 @@ final class ToolLoopOrchestrator {
     private final UsageAccumulator usageAccumulator;
     private final StopReasonResolver stopReasonResolver;
     private final BudgetEnforcer budgetEnforcer;
-    private final ResponsePersistence responsePersistence;
     private final SubAgentContext subAgentContext;
     private final FileChangeListener fileChangeListener;
 
@@ -98,7 +97,6 @@ final class ToolLoopOrchestrator {
         this.usageAccumulator = usageAccumulator;
         this.stopReasonResolver = stopReasonResolver;
         this.budgetEnforcer = budgetEnforcer;
-        this.responsePersistence = responsePersistence;
         this.subAgentContext = subAgentContext;
         this.fileChangeListener = fileChangeListener;
     }
@@ -148,8 +146,9 @@ final class ToolLoopOrchestrator {
                     iterationNumber,
                     QueryLogFormatter.summarizeUsage(usageAccumulator.total())
                 );
-                sink.onCompleted("Budget exceeded");
-                return stopReasonResolver.resolveBudgetExceeded(iterationNumber, usageAccumulator.total());
+                var result = stopReasonResolver.resolveBudgetExceeded(iterationNumber, usageAccumulator.total());
+                sink.onCompleted(result.text());
+                return result;
             }
 
             if (response instanceof ModelResponse.AssistantReply assistantReply) {
@@ -165,7 +164,6 @@ final class ToolLoopOrchestrator {
                 var assistantMessage = new Message.AssistantMessage(assistantReply.text());
                 history.add(assistantMessage);
                 currentRequest = withMessages(currentRequest, history);
-                responsePersistence.persist(bootstrapState, assistantMessage);
                 var result = stopReasonResolver.resolveEndTurn(assistantReply.text(), iterationNumber, usageAccumulator.total());
                 sink.onCompleted(assistantReply.text());
                 return result;
@@ -211,8 +209,9 @@ final class ToolLoopOrchestrator {
             maxToolIterations,
             QueryLogFormatter.summarizeUsage(usageAccumulator.total())
         );
-        sink.onCompleted("Tool iteration limit reached (" + maxToolIterations + ")");
-        return stopReasonResolver.resolveToolLimit(maxToolIterations, usageAccumulator.total());
+        var result = stopReasonResolver.resolveToolLimit(maxToolIterations, usageAccumulator.total());
+        sink.onCompleted(result.text());
+        return result;
     }
 
     private static final class QuerySinkModelStreamBridge implements ModelStreamEventSink {

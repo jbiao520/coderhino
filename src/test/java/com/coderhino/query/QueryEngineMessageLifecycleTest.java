@@ -11,16 +11,19 @@ import com.coderhino.state.SessionRuntime;
 import com.coderhino.tools.ToolRegistry;
 import com.coderhino.types.Message;
 import com.coderhino.types.PermissionMode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class QueryEngineMessageLifecycleTest {
 
@@ -139,6 +142,40 @@ class QueryEngineMessageLifecycleTest {
     }
 
     @Test
+    void executePersistsTerminalErrorResultAsAssistantMessage() {
+        var engine = buildEngine((state, request) -> {
+            throw new IllegalStateException("boom");
+        }, 5);
+
+        var result = engine.execute(bootstrapState, "prompt");
+
+        var messages = bootstrapState.get().messages();
+        assertEquals(2, messages.size());
+        assertEquals("prompt", messages.get(0).content());
+        assertEquals(result.text(), messages.get(1).content());
+        assertEquals("Query engine error: boom", result.text());
+        assertTrue(result.isError());
+        assertEquals(1, messages.stream().filter(Message.AssistantMessage.class::isInstance).count());
+    }
+
+    @Test
+    void executePersistsToolLimitResultAsAssistantMessage() {
+        var engine = buildEngine(
+            (state, request) -> new ModelResponse.ToolRequest("synthetic_output", Map.of("content", "tool output"), "tool-use-1"),
+            1
+        );
+
+        var result = engine.execute(bootstrapState, "prompt");
+
+        var messages = bootstrapState.get().messages();
+        assertEquals(2, messages.size());
+        assertEquals("prompt", messages.get(0).content());
+        assertEquals(result.text(), messages.get(1).content());
+        assertTrue(result.isToolLimitReached());
+        assertEquals(1, messages.stream().filter(Message.AssistantMessage.class::isInstance).count());
+    }
+
+    @Test
     void executeWithPreAddedUserMessageProducesExactlyOneAssistantMessage() {
         bootstrapState.addMessage(new Message.UserMessage("prompt"));
         var engine = buildEngine("Single assistant");
@@ -195,12 +232,18 @@ class QueryEngineMessageLifecycleTest {
 
     private QueryEngine buildEngine(String replyText) {
         var modelClient = (ModelClient) (state, request) -> new ModelResponse.AssistantReply(replyText);
+        return buildEngine(modelClient, 200);
+    }
+
+    private QueryEngine buildEngine(ModelClient modelClient, int maxToolIterations) {
         return new QueryEngine(
             new ToolRegistry(List.of()),
             modelClient,
             new PermissionChecker(),
             new ContextCollector(),
-            ServiceRegistry.createDefault()
+            ServiceRegistry.createDefault(),
+            new ObjectMapper(),
+            maxToolIterations
         );
     }
 

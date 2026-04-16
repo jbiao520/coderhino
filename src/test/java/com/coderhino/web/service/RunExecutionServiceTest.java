@@ -3,7 +3,9 @@ package com.coderhino.web.service;
 import com.coderhino.query.ModelClient;
 import com.coderhino.query.ModelResponse;
 import com.coderhino.query.ProviderApiType;
+import com.coderhino.query.QueryEngine;
 import com.coderhino.query.QueryRequest;
+import com.coderhino.query.TestQueryEngines;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.types.Message;
 import com.coderhino.web.credentials.ApiCredentials;
@@ -165,6 +167,96 @@ class RunExecutionServiceTest {
         assertEquals(2, messages.size());
         assertEquals("inspect repo first: project", messages.get(0).content());
         assertEquals("streamed reply", messages.get(1).content());
+    }
+
+    @Test
+    void executeAsyncPersistsTerminalErrorTextInSessionMessages() {
+        var eventBus = new CapturingEventBus();
+        var registry = createStubRegistry();
+        var service = new RunExecutionService(eventBus, registry, ServiceRegistry.createDefault(Path.of("").toAbsolutePath().normalize()), new CompletionNotificationStore()) {
+            @Override
+            protected ProviderConfigResolver createProviderConfigResolver() {
+                return new ProviderConfigResolver() {
+                    @Override
+                    public ResolvedConfig resolve(String providerId, String model) {
+                        return new ResolvedConfig("provider-1", "secret", "https://example.test", "MiniMax-M2.5", ProviderApiType.CLAUDE_CODE, 128000L);
+                    }
+                };
+            }
+
+            @Override
+            protected ModelClient createModelClient(ProviderConfigResolver.ResolvedConfig config) {
+                return (bootstrapState, request) -> {
+                    throw new IllegalStateException("boom");
+                };
+            }
+        };
+        var session = WebSession.create("ses-exec-error");
+        session.getActiveRun().set(true);
+        session.setActiveRunId("run-error");
+
+        service.executeAsync(session, "run-error", "hello");
+
+        var messages = session.getAppState().messages();
+        assertEquals(2, messages.size());
+        assertEquals("hello", messages.get(0).content());
+        assertEquals("Query engine error: boom", messages.get(1).content());
+        assertEquals(RunDto.RunStatus.FAILED, session.getCurrentRunStatus());
+        assertEquals(SessionEvent.EventType.failed, eventBus.lastEvent.type());
+        var payload = (SessionEvent.RunPayload) eventBus.lastEvent.payload();
+        assertEquals("boom", payload.error());
+    }
+
+    @Test
+    void executeAsyncPersistsToolLimitTextInSessionMessages() {
+        var eventBus = new CapturingEventBus();
+        var registry = createStubRegistry();
+        var serviceRegistry = ServiceRegistry.createDefault(Path.of("").toAbsolutePath().normalize());
+        var service = new RunExecutionService(eventBus, registry, serviceRegistry, new CompletionNotificationStore()) {
+            @Override
+            protected ProviderConfigResolver createProviderConfigResolver() {
+                return new ProviderConfigResolver() {
+                    @Override
+                    public ResolvedConfig resolve(String providerId, String model) {
+                        return new ResolvedConfig("provider-1", "secret", "https://example.test", "MiniMax-M2.5", ProviderApiType.CLAUDE_CODE, 128000L);
+                    }
+                };
+            }
+
+            @Override
+            protected ModelClient createModelClient(ProviderConfigResolver.ResolvedConfig config) {
+                return (bootstrapState, request) -> new ModelResponse.ToolRequest(
+                    "synthetic_output",
+                    java.util.Map.of("content", "tool output"),
+                    "tool-use-1"
+                );
+            }
+
+            @Override
+            protected QueryEngine createQueryEngine(ProviderConfigResolver.ResolvedConfig config, ModelClient modelClient) {
+                return TestQueryEngines.withMaxToolIterations(
+                    modelClient,
+                    serviceRegistry,
+                    1,
+                    null,
+                    WEB_RESPONSE_FORMAT_PROMPT
+                );
+            }
+        };
+        var session = WebSession.create("ses-exec-tool-limit");
+        session.getActiveRun().set(true);
+        session.setActiveRunId("run-tool-limit");
+
+        service.executeAsync(session, "run-tool-limit", "hello");
+
+        var messages = session.getAppState().messages();
+        assertEquals(2, messages.size());
+        assertEquals("hello", messages.get(0).content());
+        assertEquals("Query engine stopped after reaching the tool iteration limit.", messages.get(1).content());
+        assertEquals(RunDto.RunStatus.COMPLETED, session.getCurrentRunStatus());
+        assertEquals(SessionEvent.EventType.completed, eventBus.lastEvent.type());
+        var payload = (SessionEvent.RunPayload) eventBus.lastEvent.payload();
+        assertEquals("Query engine stopped after reaching the tool iteration limit.", payload.finalText());
     }
 
     @Test

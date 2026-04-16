@@ -80,7 +80,7 @@ class ToolLoopOrchestratorTest {
 
         assertTrue(result.isError());
         assertTrue(capturingSink.completedCalled);
-        assertEquals("Budget exceeded", capturingSink.lastCompletedText);
+        assertEquals("Query engine stopped: budget limit exceeded.", capturingSink.lastCompletedText);
     }
 
     @Test
@@ -102,7 +102,7 @@ class ToolLoopOrchestratorTest {
 
         assertTrue(result.isToolLimitReached());
         assertTrue(capturingSink.completedCalled);
-        assertTrue(capturingSink.lastCompletedText.startsWith("Tool iteration limit reached"));
+        assertEquals("Query engine stopped after reaching the tool iteration limit.", capturingSink.lastCompletedText);
     }
 
     @Test

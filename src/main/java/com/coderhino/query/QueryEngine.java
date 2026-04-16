@@ -24,6 +24,7 @@ public final class QueryEngine {
     private final ContextCollector contextCollector;
     private final ConversationHistory conversationHistory;
     private final PromptAssembler promptAssembler;
+    private final ResponsePersistence responsePersistence;
     private final ToolLoopOrchestrator toolLoopOrchestrator;
     final String customSystemPrompt;
     final String appendSystemPrompt;
@@ -135,6 +136,7 @@ public final class QueryEngine {
         this.contextCollector = contextCollector;
         this.conversationHistory = new ConversationHistory();
         this.promptAssembler = new PromptAssembler();
+        this.responsePersistence = responsePersistence;
         this.customSystemPrompt = customSystemPrompt;
         this.appendSystemPrompt = appendSystemPrompt;
         this.toolLoopOrchestrator = new ToolLoopOrchestrator(
@@ -186,11 +188,13 @@ public final class QueryEngine {
         try {
             bootstrapState.update(current -> current.withCurrentUsage(null));
             ensureLatestUserMessage(bootstrapState, visibleUserInput);
+            var assistantMessagesBeforeRun = countAssistantMessages(bootstrapState);
             var history = buildHistory(bootstrapState, currentTurn);
             var contextSnapshot = contextCollector.collect(Path.of(bootstrapState.get().cwd()));
             var assembled = promptAssembler.assemble(contextSnapshot, customSystemPrompt, appendSystemPrompt);
             var request = new QueryRequest(List.copyOf(history), assembled.systemPrompt(), customSystemPrompt, appendSystemPrompt, toolLoopOrchestrator.toolSchemas());
             var result = toolLoopOrchestrator.run(bootstrapState, request, sink);
+            persistTerminalAssistantMessage(bootstrapState, result, assistantMessagesBeforeRun);
             log.info(
                 "Query execution completed for session {} stopReason={} iterations={} usage={}",
                 sessionId,
@@ -217,5 +221,21 @@ public final class QueryEngine {
 
     ArrayList<Message> buildHistory(BootstrapState bootstrapState, ConversationHistory.CurrentTurn currentTurn) {
         return conversationHistory.build(bootstrapState, currentTurn);
+    }
+
+    private int countAssistantMessages(BootstrapState bootstrapState) {
+        return (int) bootstrapState.get().messages().stream()
+            .filter(Message.AssistantMessage.class::isInstance)
+            .count();
+    }
+
+    private void persistTerminalAssistantMessage(BootstrapState bootstrapState, QueryResult result, int assistantMessagesBeforeRun) {
+        if (result.text() == null || result.text().isBlank()) {
+            return;
+        }
+        if (countAssistantMessages(bootstrapState) > assistantMessagesBeforeRun) {
+            return;
+        }
+        responsePersistence.persist(bootstrapState, new Message.AssistantMessage(result.text()));
     }
 }

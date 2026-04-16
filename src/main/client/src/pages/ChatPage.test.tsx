@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { Terminal as MockTerminal } from 'xterm';
@@ -676,7 +676,7 @@ describe('ChatPage', () => {
     await waitFor(() => expect(screen.queryByTestId('composer-model-mode-trigger')).toBeNull());
   });
 
-  it('loads available references into the composer menu', async () => {
+  it('opens the reference browser with available references', async () => {
     seedProjectState();
     mockChatFetch();
 
@@ -685,9 +685,84 @@ describe('ChatPage', () => {
 
     fireEvent.click(screen.getByTestId('composer-reference-trigger'));
 
-    await waitFor(() => expect(screen.getByTestId('composer-reference-menu')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('composer-reference-browser')).toBeTruthy());
     expect(screen.getByTestId('composer-reference-option-api-guidelines')).toBeTruthy();
     expect(screen.getByTestId('composer-reference-option-bug-investigation')).toBeTruthy();
+  });
+
+  it('shows an empty state when no references are available', async () => {
+    seedProjectState();
+    mockChatFetch({ '/api/references': { references: [] } });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('composer-reference-trigger')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('composer-reference-trigger'));
+
+    await waitFor(() => expect(screen.getByTestId('composer-reference-empty')).toBeTruthy());
+    expect(screen.getByText('No references available')).toBeTruthy();
+  });
+
+  it('filters references on the client, paginates results, and preserves browser state after preview', async () => {
+    seedProjectState();
+    mockChatFetch({
+      '/api/references': {
+        references: [
+          { id: 'alpha-reference', label: 'Alpha Reference', markdown: '# Alpha Reference\n\nAlpha details.' },
+          { id: 'beta-reference', label: 'Beta Reference', markdown: '# Beta Reference\n\nBeta details.' },
+          { id: 'gamma-reference', label: 'Gamma Reference', markdown: '# Gamma Reference\n\nGamma details.' },
+          { id: 'delta-reference', label: 'Delta Reference', markdown: '# Delta Reference\n\nDelta details.' },
+          { id: 'epsilon-reference', label: 'Epsilon Reference', markdown: '# Epsilon Reference\n\nEpsilon details.' },
+          { id: 'eta-reference', label: 'Eta Reference', markdown: '# Eta Reference\n\nEta details.' },
+          { id: 'theta-reference', label: 'Theta Reference', markdown: '# Theta Reference\n\nTheta details.' },
+          { id: 'iota-reference', label: 'Iota Reference', markdown: '# Iota Reference\n\nIota details.' },
+          { id: 'kappa-reference', label: 'Kappa Reference', markdown: '# Kappa Reference\n\nKappa details.' },
+          { id: 'lambda-reference', label: 'Lambda Reference', markdown: '# Lambda Reference\n\nLambda details.' },
+          { id: 'mu-reference', label: 'Mu Reference', markdown: '# Mu Reference\n\nMu details.' },
+          { id: 'nu-reference', label: 'Nu Reference', markdown: '# Nu Reference\n\nNu details.' },
+          { id: 'zeta-reference', label: 'Zeta Reference', markdown: '# Zeta Reference\n\nZeta details.' },
+          { id: 'omega-notes', label: 'Omega Notes', markdown: '# Omega Notes\n\nOmega details.' },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('composer-reference-trigger')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('composer-reference-trigger'));
+
+    await waitFor(() => expect(screen.getByTestId('composer-reference-page-status')).toBeTruthy());
+    expect(screen.getByTestId('composer-reference-page-status').textContent).toBe('Page 1 of 2');
+    expect(screen.getByTestId('composer-reference-option-alpha-reference')).toBeTruthy();
+    expect(screen.queryByTestId('composer-reference-option-zeta-reference')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('composer-reference-page-next'));
+    await waitFor(() => expect(screen.getByTestId('composer-reference-page-status').textContent).toBe('Page 2 of 2'));
+    expect(screen.getByTestId('composer-reference-option-zeta-reference')).toBeTruthy();
+    expect(screen.getByTestId('composer-reference-option-omega-notes')).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId('composer-reference-search'), { target: { value: 'Reference' } });
+    await waitFor(() => expect(screen.getByTestId('composer-reference-page-status').textContent).toBe('Page 1 of 2'));
+    expect(screen.getByTestId('composer-reference-option-alpha-reference')).toBeTruthy();
+    expect(screen.queryByTestId('composer-reference-option-omega-notes')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('composer-reference-page-next'));
+    await waitFor(() => expect(screen.getByTestId('composer-reference-page-status').textContent).toBe('Page 2 of 2'));
+    expect(screen.getByTestId('composer-reference-option-zeta-reference')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('composer-reference-preview-zeta-reference'));
+    await waitFor(() => expect(screen.getByTestId('composer-reference-preview-modal')).toBeTruthy());
+    expect(within(screen.getByTestId('composer-reference-preview-modal')).getByText('Zeta Reference')).toBeTruthy();
+    expect(within(screen.getByTestId('composer-reference-preview-modal')).getByText('Zeta details.')).toBeTruthy();
+
+    const closeButtons = screen.getAllByTestId('popup-close');
+    fireEvent.click(closeButtons[closeButtons.length - 1]!);
+
+    await waitFor(() => expect(screen.queryByTestId('composer-reference-preview-modal')).toBeNull());
+    expect(screen.getByTestId('composer-reference-browser')).toBeTruthy();
+    expect(screen.getByTestId('composer-reference-page-status').textContent).toBe('Page 2 of 2');
+    expect((screen.getByTestId('composer-reference-search') as HTMLInputElement).value).toBe('Reference');
+    expect(screen.getByTestId('composer-reference-option-zeta-reference')).toBeTruthy();
   });
 
   it('inserts selected reference markdown at the current cursor position and restores focus', async () => {
@@ -710,7 +785,7 @@ describe('ChatPage', () => {
     await waitFor(() => expect(document.activeElement).toBe(input));
     await waitFor(() => expect(input.selectionStart).toBe('Hello # API Guidelines\n\nKeep contracts stable.'.length));
     await waitFor(() => expect(input.selectionEnd).toBe('Hello # API Guidelines\n\nKeep contracts stable.'.length));
-    expect(screen.queryByTestId('composer-reference-menu')).toBeNull();
+    expect(screen.queryByTestId('composer-reference-browser')).toBeNull();
   });
 
   it('replaces the current selection when inserting a reference', async () => {
