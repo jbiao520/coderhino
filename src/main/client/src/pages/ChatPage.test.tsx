@@ -67,8 +67,8 @@ const mockSession = {
 
 const mockReferences = {
   references: [
-    { id: 'api-guidelines', label: 'Api Guidelines', markdown: '# API Guidelines\n\nKeep contracts stable.' },
-    { id: 'bug-investigation', label: 'Bug Investigation', markdown: '# Bug Investigation\n\n1. Reproduce.' },
+    { id: 'api-guidelines', label: 'Api Guidelines', filename: 'api-guidelines.md', source: 'Bundled', markdown: '# API Guidelines\n\nKeep contracts stable.' },
+    { id: 'bug-investigation', label: 'Bug Investigation', filename: 'bug-investigation.md', source: 'Bundled', markdown: '# Bug Investigation\n\n1. Reproduce.' },
   ],
 };
 
@@ -274,6 +274,7 @@ const mockSettings: WebSettings = {
   sidebarFontSize: 13,
   chatFontFamily: 'mono',
   chatFontSize: 16,
+  referenceSourcePaths: [],
 };
 
 function seedProjectState(projectId = 'proj-1', sessionId = 'ses-abc') {
@@ -688,6 +689,7 @@ describe('ChatPage', () => {
     await waitFor(() => expect(screen.getByTestId('composer-reference-browser')).toBeTruthy());
     expect(screen.getByTestId('composer-reference-option-api-guidelines')).toBeTruthy();
     expect(screen.getByTestId('composer-reference-option-bug-investigation')).toBeTruthy();
+    expect(screen.getByText('api-guidelines.md')).toBeTruthy();
   });
 
   it('shows an empty state when no references are available', async () => {
@@ -708,20 +710,20 @@ describe('ChatPage', () => {
     mockChatFetch({
       '/api/references': {
         references: [
-          { id: 'alpha-reference', label: 'Alpha Reference', markdown: '# Alpha Reference\n\nAlpha details.' },
-          { id: 'beta-reference', label: 'Beta Reference', markdown: '# Beta Reference\n\nBeta details.' },
-          { id: 'gamma-reference', label: 'Gamma Reference', markdown: '# Gamma Reference\n\nGamma details.' },
-          { id: 'delta-reference', label: 'Delta Reference', markdown: '# Delta Reference\n\nDelta details.' },
-          { id: 'epsilon-reference', label: 'Epsilon Reference', markdown: '# Epsilon Reference\n\nEpsilon details.' },
-          { id: 'eta-reference', label: 'Eta Reference', markdown: '# Eta Reference\n\nEta details.' },
-          { id: 'theta-reference', label: 'Theta Reference', markdown: '# Theta Reference\n\nTheta details.' },
-          { id: 'iota-reference', label: 'Iota Reference', markdown: '# Iota Reference\n\nIota details.' },
-          { id: 'kappa-reference', label: 'Kappa Reference', markdown: '# Kappa Reference\n\nKappa details.' },
-          { id: 'lambda-reference', label: 'Lambda Reference', markdown: '# Lambda Reference\n\nLambda details.' },
-          { id: 'mu-reference', label: 'Mu Reference', markdown: '# Mu Reference\n\nMu details.' },
-          { id: 'nu-reference', label: 'Nu Reference', markdown: '# Nu Reference\n\nNu details.' },
-          { id: 'zeta-reference', label: 'Zeta Reference', markdown: '# Zeta Reference\n\nZeta details.' },
-          { id: 'omega-notes', label: 'Omega Notes', markdown: '# Omega Notes\n\nOmega details.' },
+          { id: 'alpha-reference', label: 'Alpha Reference', filename: 'alpha-reference.md', source: 'Bundled', markdown: '# Alpha Reference\n\nAlpha details.' },
+          { id: 'beta-reference', label: 'Beta Reference', filename: 'beta-reference.md', source: 'Bundled', markdown: '# Beta Reference\n\nBeta details.' },
+          { id: 'gamma-reference', label: 'Gamma Reference', filename: 'gamma-reference.md', source: 'Bundled', markdown: '# Gamma Reference\n\nGamma details.' },
+          { id: 'delta-reference', label: 'Delta Reference', filename: 'delta-reference.md', source: 'Bundled', markdown: '# Delta Reference\n\nDelta details.' },
+          { id: 'epsilon-reference', label: 'Epsilon Reference', filename: 'epsilon-reference.md', source: 'Bundled', markdown: '# Epsilon Reference\n\nEpsilon details.' },
+          { id: 'eta-reference', label: 'Eta Reference', filename: 'eta-reference.md', source: 'Bundled', markdown: '# Eta Reference\n\nEta details.' },
+          { id: 'theta-reference', label: 'Theta Reference', filename: 'theta-reference.md', source: 'Bundled', markdown: '# Theta Reference\n\nTheta details.' },
+          { id: 'iota-reference', label: 'Iota Reference', filename: 'iota-reference.md', source: 'Bundled', markdown: '# Iota Reference\n\nIota details.' },
+          { id: 'kappa-reference', label: 'Kappa Reference', filename: 'kappa-reference.md', source: 'Bundled', markdown: '# Kappa Reference\n\nKappa details.' },
+          { id: 'lambda-reference', label: 'Lambda Reference', filename: 'lambda-reference.md', source: 'Bundled', markdown: '# Lambda Reference\n\nLambda details.' },
+          { id: 'mu-reference', label: 'Mu Reference', filename: 'mu-reference.md', source: 'Bundled', markdown: '# Mu Reference\n\nMu details.' },
+          { id: 'nu-reference', label: 'Nu Reference', filename: 'nu-reference.md', source: 'Bundled', markdown: '# Nu Reference\n\nNu details.' },
+          { id: 'zeta-reference', label: 'Zeta Reference', filename: 'zeta-reference.md', source: 'Custom Docs', markdown: '# Zeta Reference\n\nZeta details.' },
+          { id: 'omega-notes', label: 'Omega Notes', filename: 'omega-notes.md', source: 'Custom Docs', markdown: '# Omega Notes\n\nOmega details.' },
         ],
       },
     });
@@ -752,8 +754,10 @@ describe('ChatPage', () => {
 
     fireEvent.click(screen.getByTestId('composer-reference-preview-zeta-reference'));
     await waitFor(() => expect(screen.getByTestId('composer-reference-preview-modal')).toBeTruthy());
-    expect(within(screen.getByTestId('composer-reference-preview-modal')).getByText('Zeta Reference')).toBeTruthy();
-    expect(within(screen.getByTestId('composer-reference-preview-modal')).getByText('Zeta details.')).toBeTruthy();
+    const previewModal = screen.getByTestId('composer-reference-preview-modal');
+    expect(within(previewModal).getByText('Zeta details.')).toBeTruthy();
+    expect(screen.getAllByText('zeta-reference.md').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Custom Docs').length).toBeGreaterThan(0);
 
     const closeButtons = screen.getAllByTestId('popup-close');
     fireEvent.click(closeButtons[closeButtons.length - 1]!);
@@ -786,6 +790,35 @@ describe('ChatPage', () => {
     await waitFor(() => expect(input.selectionStart).toBe('Hello # API Guidelines\n\nKeep contracts stable.'.length));
     await waitFor(() => expect(input.selectionEnd).toBe('Hello # API Guidelines\n\nKeep contracts stable.'.length));
     expect(screen.queryByTestId('composer-reference-browser')).toBeNull();
+  });
+
+  it('shows configured reference filenames directly in the browser and preview popup', async () => {
+    seedProjectState();
+    mockChatFetch({
+      '/api/references': {
+        references: [
+          {
+            id: 'project-readme',
+            label: 'Project Readme',
+            filename: 'README.md',
+            source: 'workspace-docs',
+            markdown: '# README\n\nWorkspace docs.',
+          },
+        ],
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('composer-reference-trigger')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('composer-reference-trigger'));
+    await waitFor(() => expect(screen.getByText('README.md')).toBeTruthy());
+    expect(screen.getByText('workspace-docs')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('composer-reference-preview-project-readme'));
+    await waitFor(() => expect(screen.getByTestId('composer-reference-preview-modal')).toBeTruthy());
+    expect(screen.getAllByText('README.md').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('workspace-docs').length).toBeGreaterThan(0);
   });
 
   it('replaces the current selection when inserting a reference', async () => {

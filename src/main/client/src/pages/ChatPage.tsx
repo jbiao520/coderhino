@@ -681,7 +681,9 @@ export default function ChatPage({
       return references;
     }
     return references.filter((reference) =>
-      reference.label.toLowerCase().includes(normalizedReferenceSearchQuery));
+      reference.label.toLowerCase().includes(normalizedReferenceSearchQuery)
+      || reference.filename.toLowerCase().includes(normalizedReferenceSearchQuery)
+      || (reference.source?.toLowerCase().includes(normalizedReferenceSearchQuery) ?? false));
   }, [normalizedReferenceSearchQuery, references]);
   const referencePageCount = Math.max(1, Math.ceil(filteredReferences.length / REFERENCE_PAGE_SIZE));
   const visibleReferences = useMemo(() => {
@@ -2312,7 +2314,10 @@ export default function ChatPage({
                       onClick={() => handleReferenceSelect(reference)}
                       data-testid={`composer-reference-option-${toTestIdFragment(reference.id)}`}
                     >
-                      <span style={styles.referenceRowLabel}>{reference.label}</span>
+                      <span style={styles.referenceRowText}>
+                        <span style={styles.referenceRowFilename}>{reference.filename}</span>
+                        {reference.source ? <span style={styles.referenceRowMeta}>{reference.source}</span> : null}
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -2362,8 +2367,8 @@ export default function ChatPage({
         onClose={handleCloseReferencePreview}
         headerContent={(
           <div style={styles.referencePreviewHeader}>
-            <div style={styles.referencePreviewTitle}>{referencePreview?.label ?? 'Reference preview'}</div>
-            <code style={styles.referencePreviewMeta}>{referencePreview?.id ?? 'reference'}.md</code>
+            <div style={styles.referencePreviewTitle}>{referencePreview?.filename ?? 'Reference preview'}</div>
+            <code style={styles.referencePreviewMeta}>{referencePreview?.source ?? referencePreview?.label ?? 'reference'}</code>
           </div>
         )}
         contentStyle={styles.referencePreviewModal}
@@ -3110,7 +3115,14 @@ const styles = {
     background: 'transparent',
     textAlign: 'left' as const,
   } as React.CSSProperties,
-  referenceRowLabel: {
+  referenceRowText: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 2,
+    width: '100%',
+    minWidth: 0,
+  } as React.CSSProperties,
+  referenceRowFilename: {
     display: 'block',
     width: '100%',
     overflow: 'hidden',
@@ -3119,6 +3131,15 @@ const styles = {
     fontSize: 'calc(var(--chat-font-size) - 1px)',
     fontWeight: 600,
     color: 'var(--text)',
+  } as React.CSSProperties,
+  referenceRowMeta: {
+    display: 'block',
+    width: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    fontSize: 'calc(var(--chat-font-size) - 3px)',
+    color: 'var(--text-muted)',
   } as React.CSSProperties,
   referencePreviewButton: {
     minWidth: 72,

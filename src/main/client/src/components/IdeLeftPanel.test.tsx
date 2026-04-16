@@ -95,6 +95,7 @@ const mockSettings: WebSettings = {
   sidebarFontSize: 16,
   chatFontFamily: 'sans',
   chatFontSize: 13,
+  referenceSourcePaths: [],
 };
 
 const mockMultiProjectState = {

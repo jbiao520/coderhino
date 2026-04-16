@@ -173,6 +173,8 @@ export interface CommandDto {
 export interface ReferenceDto {
   id: string;
   label: string;
+  filename: string;
+  source?: string | null;
   markdown: string;
 }
 
@@ -253,6 +255,7 @@ export interface WebSettings {
   sidebarFontSize?: number | null;
   chatFontFamily?: string | null;
   chatFontSize?: number | null;
+  referenceSourcePaths?: string[] | null;
 }
 
 export interface ApprovalRecord {

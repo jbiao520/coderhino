@@ -21,7 +21,7 @@ class ReferenceControllerTest {
         var controller = new ReferenceController(new ReferenceService(null) {
             @Override
             public List<ReferenceDto> listReferences() {
-                return List.of(new ReferenceDto("api-guidelines", "Api Guidelines", "# API Guidelines"));
+                return List.of(new ReferenceDto("api-guidelines", "Api Guidelines", "api-guidelines.md", "Bundled", "# API Guidelines"));
             }
         });
 
@@ -32,6 +32,7 @@ class ReferenceControllerTest {
         var body = assertInstanceOf(ReferenceListDto.class, response.getBody());
         assertEquals(1, body.references().size());
         assertEquals("api-guidelines", body.references().get(0).id());
+        assertEquals("api-guidelines.md", body.references().get(0).filename());
     }
 
     @Test

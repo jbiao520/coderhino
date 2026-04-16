@@ -6,6 +6,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/settings")
 public class SettingsController {
@@ -43,6 +45,9 @@ public class SettingsController {
         if (resolved.getChatFontSize() == null) {
             resolved.setChatFontSize(13);
         }
+        if (resolved.getReferenceSourcePaths() == null) {
+            resolved.setReferenceSourcePaths(List.of());
+        }
         return resolved;
     }
 
@@ -67,6 +72,9 @@ public class SettingsController {
         }
         if (source.getChatFontSize() != null) {
             target.setChatFontSize(source.getChatFontSize());
+        }
+        if (source.getReferenceSourcePaths() != null) {
+            target.setReferenceSourcePaths(source.getReferenceSourcePaths());
         }
     }
 }

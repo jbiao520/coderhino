@@ -2,6 +2,9 @@ package com.coderhino.web.settings;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Non-secret web settings persisted locally and exposed via API.
  * Never contains tokens, API keys, or other secrets.
@@ -29,6 +32,9 @@ public class WebSettings {
     @JsonProperty("chatFontSize")
     private Integer chatFontSize;
 
+    @JsonProperty("referenceSourcePaths")
+    private List<String> referenceSourcePaths;
+
     public WebSettings() {
         this.defaultPermissionMode = "BYPASS";
         this.theme = "system";
@@ -37,6 +43,7 @@ public class WebSettings {
         this.sidebarFontSize = null;
         this.chatFontFamily = null;
         this.chatFontSize = null;
+        this.referenceSourcePaths = null;
     }
 
     public String getDefaultPermissionMode() { return defaultPermissionMode; }
@@ -62,6 +69,11 @@ public class WebSettings {
     public Integer getChatFontSize() { return chatFontSize; }
     public void setChatFontSize(Integer chatFontSize) { this.chatFontSize = chatFontSize; }
 
+    public List<String> getReferenceSourcePaths() { return referenceSourcePaths; }
+    public void setReferenceSourcePaths(List<String> referenceSourcePaths) {
+        this.referenceSourcePaths = referenceSourcePaths == null ? null : new ArrayList<>(referenceSourcePaths);
+    }
+
     public WebSettings copy() {
         var copy = new WebSettings();
         copy.defaultPermissionMode = this.defaultPermissionMode;
@@ -71,6 +83,7 @@ public class WebSettings {
         copy.sidebarFontSize = this.sidebarFontSize;
         copy.chatFontFamily = this.chatFontFamily;
         copy.chatFontSize = this.chatFontSize;
+        copy.referenceSourcePaths = this.referenceSourcePaths == null ? null : new ArrayList<>(this.referenceSourcePaths);
         return copy;
     }
 }

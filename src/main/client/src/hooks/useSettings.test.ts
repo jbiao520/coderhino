@@ -10,6 +10,7 @@ const mockSettings = {
   sidebarFontSize: 13,
   chatFontFamily: 'sans',
   chatFontSize: 13,
+  referenceSourcePaths: ['/docs/references'],
 };
 
 describe('useSettings', () => {
@@ -31,6 +32,7 @@ describe('useSettings', () => {
     expect(result.current.settings?.defaultModel).toBe('MiniMax-M2.7');
     expect(result.current.settings?.sidebarFontFamily).toBe('sans');
     expect(result.current.settings?.chatFontSize).toBe(13);
+    expect(result.current.settings?.referenceSourcePaths).toEqual(['/docs/references']);
     expect(result.current.error).toBeNull();
   });
 
@@ -47,7 +49,7 @@ describe('useSettings', () => {
   });
 
   it('saveSettings calls PUT /api/settings and updates state', async () => {
-    const updatedSettings = { ...mockSettings, theme: 'light', sidebarFontFamily: 'mono', chatFontSize: 16 };
+    const updatedSettings = { ...mockSettings, theme: 'light', sidebarFontFamily: 'mono', chatFontSize: 16, referenceSourcePaths: ['/docs/references', '/notes/wiki'] };
     (globalThis.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ ok: true, json: async () => mockSettings })
       .mockResolvedValueOnce({ ok: true, json: async () => updatedSettings });
@@ -56,11 +58,12 @@ describe('useSettings', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     await act(async () => {
-      await result.current.saveSettings({ theme: 'light', sidebarFontFamily: 'mono', chatFontSize: 16 });
+      await result.current.saveSettings({ theme: 'light', sidebarFontFamily: 'mono', chatFontSize: 16, referenceSourcePaths: ['/docs/references', '/notes/wiki'] });
     });
 
     expect(result.current.settings?.theme).toBe('light');
     expect(result.current.settings?.sidebarFontFamily).toBe('mono');
     expect(result.current.settings?.chatFontSize).toBe(16);
+    expect(result.current.settings?.referenceSourcePaths).toEqual(['/docs/references', '/notes/wiki']);
   });
 });

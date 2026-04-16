@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.HttpStatus;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -26,6 +27,7 @@ class SettingsControllerTest {
         assertEquals(13, response.getBody().getSidebarFontSize());
         assertEquals("sans", response.getBody().getChatFontFamily());
         assertEquals(13, response.getBody().getChatFontSize());
+        assertEquals(List.of(), response.getBody().getReferenceSourcePaths());
     }
 
     @Test
@@ -38,6 +40,7 @@ class SettingsControllerTest {
         updates.setSidebarFontSize(16);
         updates.setChatFontFamily("sans");
         updates.setChatFontSize(15);
+        updates.setReferenceSourcePaths(List.of("/tmp/docs", "/tmp/notes"));
 
         var response = controller.updateSettings(updates);
         var stored = service.load();
@@ -52,5 +55,7 @@ class SettingsControllerTest {
         assertEquals(16, stored.getSidebarFontSize());
         assertEquals("sans", stored.getChatFontFamily());
         assertEquals(15, stored.getChatFontSize());
+        assertEquals(List.of("/tmp/docs", "/tmp/notes"), response.getBody().getReferenceSourcePaths());
+        assertEquals(List.of("/tmp/docs", "/tmp/notes"), stored.getReferenceSourcePaths());
     }
 }

@@ -133,6 +133,7 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
   const [sidebarFontSize, setSidebarFontSize] = useState('13');
   const [chatFontFamily, setChatFontFamily] = useState('sans');
   const [chatFontSize, setChatFontSize] = useState('13');
+  const [referenceSourcePaths, setReferenceSourcePaths] = useState<string[]>(['']);
   const [saved, setSaved] = useState(false);
 
   const [providers, setProviders] = useState<EditableProvider[]>([]);
@@ -151,6 +152,9 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
       setSidebarFontSize(String(settings.sidebarFontSize ?? 13));
       setChatFontFamily(settings.chatFontFamily ?? 'sans');
       setChatFontSize(String(settings.chatFontSize ?? 13));
+      setReferenceSourcePaths(settings.referenceSourcePaths && settings.referenceSourcePaths.length > 0
+        ? settings.referenceSourcePaths
+        : ['']);
     }
   }, [settings]);
 
@@ -177,6 +181,9 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
 
   const handleSave = async (event: FormEvent) => {
     event.preventDefault();
+    const normalizedReferenceSourcePaths = referenceSourcePaths
+      .map((path) => path.trim())
+      .filter((path, index, values) => path.length > 0 && values.indexOf(path) === index);
     await saveSettings({
       defaultPermissionMode: permMode,
       theme,
@@ -185,9 +192,26 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
       sidebarFontSize: Number(sidebarFontSize),
       chatFontFamily,
       chatFontSize: Number(chatFontSize),
+      referenceSourcePaths: normalizedReferenceSourcePaths,
     });
+    setReferenceSourcePaths(normalizedReferenceSourcePaths.length > 0 ? normalizedReferenceSourcePaths : ['']);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleReferenceSourcePathChange = (index: number, value: string) => {
+    setReferenceSourcePaths((current) => current.map((path, currentIndex) => (currentIndex === index ? value : path)));
+  };
+
+  const handleAddReferenceSourcePath = () => {
+    setReferenceSourcePaths((current) => [...current, '']);
+  };
+
+  const handleRemoveReferenceSourcePath = (index: number) => {
+    setReferenceSourcePaths((current) => {
+      const next = current.filter((_, currentIndex) => currentIndex !== index);
+      return next.length > 0 ? next : [''];
+    });
   };
 
   const sidebarPreviewStyle = getFontPreviewStyle({
@@ -550,6 +574,45 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
                       </div>
                     </div>
                   </section>
+                </section>
+
+                <section className="settings-card" data-testid="reference-source-paths-group">
+                  <div className="settings-card-header settings-card-header-inline">
+                    <div>
+                      <h3 className="settings-card-title">Reference Source Paths</h3>
+                      <p className="settings-card-copy">Add directories whose markdown files should appear in the reference popup.</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={handleAddReferenceSourcePath}
+                      data-testid="add-reference-source-path-btn"
+                    >
+                      Add Path
+                    </button>
+                  </div>
+
+                  <div className="settings-reference-path-list">
+                    {referenceSourcePaths.map((path, index) => (
+                      <div className="settings-reference-path-row" key={`reference-source-path-${index}`}>
+                        <input
+                          className="input-field settings-input"
+                          value={path}
+                          onChange={(event) => handleReferenceSourcePathChange(index, event.target.value)}
+                          placeholder="/path/to/markdown-directory"
+                          data-testid={`reference-source-path-input-${index}`}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => handleRemoveReferenceSourcePath(index)}
+                          data-testid={`remove-reference-source-path-btn-${index}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </section>
 
                 <div className="settings-actions">

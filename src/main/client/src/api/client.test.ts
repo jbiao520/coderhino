@@ -303,7 +303,7 @@ describe('api.sessions.rename', () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        references: [{ id: 'api-guidelines', label: 'Api Guidelines', markdown: '# API Guidelines' }],
+        references: [{ id: 'api-guidelines', label: 'Api Guidelines', filename: 'api-guidelines.md', source: 'Bundled', markdown: '# API Guidelines' }],
       }),
     });
 
@@ -313,5 +313,6 @@ describe('api.sessions.rename', () => {
       headers: { 'Content-Type': 'application/json' },
     });
     expect(result.references[0]?.id).toBe('api-guidelines');
+    expect(result.references[0]?.filename).toBe('api-guidelines.md');
   });
 });

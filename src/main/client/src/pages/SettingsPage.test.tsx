@@ -11,6 +11,7 @@ const mockSettings = {
   sidebarFontSize: 13,
   chatFontFamily: 'sans',
   chatFontSize: 13,
+  referenceSourcePaths: ['/docs/references', '/notes/wiki'],
 };
 
 const mockCredentials = {
@@ -138,8 +139,40 @@ describe('SettingsPage', () => {
 
     expect(screen.getByTestId('sidebar-font-settings-group')).toBeTruthy();
     expect(screen.getByTestId('chat-font-settings-group')).toBeTruthy();
+    expect(screen.getByTestId('reference-source-paths-group')).toBeTruthy();
     expect((screen.getByTestId('sidebar-font-family-select') as HTMLSelectElement).value).toBe('sans');
     expect((screen.getByTestId('chat-font-size-select') as HTMLSelectElement).value).toBe('13');
+    expect((screen.getByTestId('reference-source-path-input-0') as HTMLInputElement).value).toBe('/docs/references');
+  });
+
+  it('saves normalized reference source paths via PUT /api/settings', async () => {
+    renderPage();
+    await waitFor(() => screen.getByTestId('settings-form'));
+
+    fireEvent.change(screen.getByTestId('reference-source-path-input-0'), { target: { value: '  /docs/references  ' } });
+    fireEvent.click(screen.getByTestId('add-reference-source-path-btn'));
+    fireEvent.change(screen.getByTestId('reference-source-path-input-1'), { target: { value: '/notes/wiki' } });
+    fireEvent.click(screen.getByTestId('add-reference-source-path-btn'));
+    fireEvent.change(screen.getByTestId('reference-source-path-input-2'), { target: { value: '/docs/references' } });
+    fireEvent.submit(screen.getByTestId('settings-form'));
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      const putCall = calls.find(
+        (c: unknown[]) => Array.isArray(c) && c[0] === '/api/settings' && c[1] && (c[1] as RequestInit).method === 'PUT',
+      );
+      expect(putCall).toBeTruthy();
+      const body = JSON.parse(((putCall?.[1] as RequestInit).body as string) ?? '{}');
+      expect(body.referenceSourcePaths).toEqual(['/docs/references', '/notes/wiki']);
+    });
+  });
+
+  it('removes a reference source path before saving', async () => {
+    renderPage();
+    await waitFor(() => screen.getByTestId('settings-form'));
+
+    fireEvent.click(screen.getByTestId('remove-reference-source-path-btn-0'));
+    expect((screen.getByTestId('reference-source-path-input-0') as HTMLInputElement).value).toBe('/notes/wiki');
   });
 
   it('shows error state on settings fetch failure', async () => {

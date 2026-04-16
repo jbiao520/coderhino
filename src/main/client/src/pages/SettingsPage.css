@@ -329,6 +329,19 @@
   gap: 10px;
 }
 
+.settings-reference-path-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-reference-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .settings-provider-model-row {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(140px, 0.8fr) auto;
@@ -434,6 +447,7 @@
 
   .settings-inline-row,
   .settings-card-header-inline,
+  .settings-reference-path-row,
   .settings-provider-model-row {
     flex-direction: column;
     align-items: stretch;
