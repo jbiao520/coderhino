@@ -291,7 +291,7 @@ public class SessionDto {
     private static List<String> buildAvailableModels(String currentModel, ApiCredentials.ApiProvider provider) {
         var models = new ArrayList<String>();
         if (provider != null && provider.getModels() != null) {
-            models.addAll(provider.getModels());
+            models.addAll(provider.getModelIds());
         }
         if (currentModel == null || currentModel.isBlank()) {
             return models;
@@ -312,7 +312,7 @@ public class SessionDto {
                     provider.getId(),
                     provider.getName(),
                     buildAvailableModels(selected ? currentModel : null, provider),
-                    buildModelOptions(selected ? currentModel : null, provider != null ? provider.getModels() : List.of()),
+                    buildModelOptions(selected ? currentModel : null, provider != null ? provider.getModelIds() : List.of()),
                     false
                 ));
                 if (provider.getId() != null && provider.getId().equals(selectedProviderId)) {
@@ -409,6 +409,7 @@ public class SessionDto {
                 replay.fileSummary().deleted()
             ),
             replay.pendingQuestion() == null ? null : new PendingQuestionDto(
+                replay.runId(),
                 replay.pendingQuestion().toolUseId(),
                 replay.pendingQuestion().question(),
                 replay.pendingQuestion().choices()
@@ -627,6 +628,10 @@ public class SessionDto {
     }
 
     public static class PendingQuestionDto {
+        @JsonProperty("runId")
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String runId;
+
         @JsonProperty("toolUseId")
         private String toolUseId;
 
@@ -639,11 +644,15 @@ public class SessionDto {
         public PendingQuestionDto() {
         }
 
-        public PendingQuestionDto(String toolUseId, String question, List<String> choices) {
+        public PendingQuestionDto(String runId, String toolUseId, String question, List<String> choices) {
+            this.runId = runId;
             this.toolUseId = toolUseId;
             this.question = question;
             this.choices = choices != null ? List.copyOf(choices) : List.of();
         }
+
+        public String getRunId() { return runId; }
+        public void setRunId(String runId) { this.runId = runId; }
 
         public String getToolUseId() { return toolUseId; }
         public void setToolUseId(String toolUseId) { this.toolUseId = toolUseId; }

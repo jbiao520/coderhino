@@ -22,7 +22,8 @@ import com.coderhino.web.settings.WebSettings;
 public class AgentConfigResolver {
 
     private static final String DEFAULT_MODEL = "MiniMax-M2.5";
-    private static final String DEFAULT_BASE_URL = "https://api.anthropic.com";
+    private static final ProviderApiType DEFAULT_API_TYPE = ProviderApiType.CLAUDE_CODE;
+    private static final long DEFAULT_CONTEXT_WINDOW = 128000L;
 
     private final CredentialsPersistenceService credentialsService;
     private final SettingsPersistenceService settingsService;
@@ -75,12 +76,14 @@ public class AgentConfigResolver {
         }
 
         // Resolve base URL with normalization
-        String baseUrl = normalizeBaseUrl(provider.getApiBaseUrl());
+        ProviderApiType apiType = ProviderApiType.fromStoredValue(provider.getApiType());
+        String baseUrl = normalizeBaseUrl(provider.getApiBaseUrl(), apiType);
 
         // Resolve model with precedence: defaultProvider.models[0] > settings.defaultModel > DEFAULT_MODEL
         String model = resolveModel(provider, settings.getDefaultModel());
+        long contextWindow = resolveContextWindow(provider, model);
 
-        return new ResolvedConfig(apiKey, baseUrl, model);
+        return new ResolvedConfig(apiKey, baseUrl, model, apiType, contextWindow);
     }
 
     /**
@@ -90,9 +93,9 @@ public class AgentConfigResolver {
      * @param rawBaseUrl raw base URL from credentials (may be null/blank)
      * @return normalized base URL
      */
-    private String normalizeBaseUrl(String rawBaseUrl) {
+    private String normalizeBaseUrl(String rawBaseUrl, ProviderApiType apiType) {
         if (rawBaseUrl == null || rawBaseUrl.isBlank()) {
-            return DEFAULT_BASE_URL;
+            return (apiType == null ? DEFAULT_API_TYPE : apiType).defaultBaseUrl();
         }
 
         String normalized = rawBaseUrl.trim();
@@ -115,14 +118,25 @@ public class AgentConfigResolver {
     private String resolveModel(ApiCredentials.ApiProvider provider, String settingsModel) {
         if (provider != null && provider.getModels() != null && !provider.getModels().isEmpty()) {
             var providerModel = provider.getModels().get(0);
-            if (providerModel != null && !providerModel.isBlank()) {
-                return providerModel.trim();
+            if (providerModel != null && providerModel.getId() != null && !providerModel.getId().isBlank()) {
+                return providerModel.getId().trim();
             }
         }
         if (settingsModel != null && !settingsModel.isBlank()) {
             return settingsModel.trim();
         }
         return DEFAULT_MODEL;
+    }
+
+    private long resolveContextWindow(ApiCredentials.ApiProvider provider, String selectedModel) {
+        if (provider == null || selectedModel == null || selectedModel.isBlank()) {
+            return DEFAULT_CONTEXT_WINDOW;
+        }
+        var model = provider.findModel(selectedModel.trim());
+        if (model == null) {
+            return DEFAULT_CONTEXT_WINDOW;
+        }
+        return ApiCredentials.ApiProvider.ModelConfig.normalizeContextWindow(model.getContextWindow());
     }
 
     /**
@@ -132,11 +146,15 @@ public class AgentConfigResolver {
         private final String apiKey;
         private final String baseUrl;
         private final String model;
+        private final ProviderApiType apiType;
+        private final long contextWindow;
 
-        public ResolvedConfig(String apiKey, String baseUrl, String model) {
+        public ResolvedConfig(String apiKey, String baseUrl, String model, ProviderApiType apiType, long contextWindow) {
             this.apiKey = apiKey;
             this.baseUrl = baseUrl;
             this.model = model;
+            this.apiType = apiType;
+            this.contextWindow = contextWindow;
         }
 
         public String getApiKey() {
@@ -149,6 +167,14 @@ public class AgentConfigResolver {
 
         public String getModel() {
             return model;
+        }
+
+        public ProviderApiType getApiType() {
+            return apiType;
+        }
+
+        public long getContextWindow() {
+            return contextWindow;
         }
     }
 }

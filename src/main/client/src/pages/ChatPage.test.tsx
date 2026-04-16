@@ -732,7 +732,7 @@ describe('ChatPage', () => {
     await waitFor(() => expect(input.value).toBe('Hello # Bug Investigation\n\n1. Reproduce.'));
   });
 
-  it('shows cancel button while run is active', async () => {
+  it('shows composer stop button while run is active', async () => {
     seedProjectState();
     mockChatFetch({ '/api/sessions/ses-abc/runs': { runId: 'run-2', status: 'RUNNING' } });
 
@@ -746,7 +746,9 @@ describe('ChatPage', () => {
       fireEvent.submit(screen.getByTestId('composer'));
     });
 
-    await waitFor(() => expect(screen.getByTestId('cancel-btn')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('stop-btn')).toBeTruthy());
+    expect(screen.getByTestId('stop-btn').getAttribute('aria-label')).toBe('Stop run');
+    expect(screen.getByTestId('cancel-btn')).toBeTruthy();
   });
 
   it('disables textarea while run is active', async () => {
@@ -766,6 +768,7 @@ describe('ChatPage', () => {
     await waitFor(() => {
       expect((screen.getByTestId('message-input') as HTMLTextAreaElement).disabled).toBe(true);
     });
+    expect(screen.getByTestId('stop-btn')).toBeTruthy();
   });
 
   it('navigates submitted prompts with ArrowUp and ArrowDown', async () => {
@@ -1146,6 +1149,36 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('live-output').textContent).toContain('Recovered answer');
   });
 
+  it('shows an explicit retry indicator while the run is still active and clears it when progress resumes', async () => {
+    seedProjectState();
+    mockChatFetch({
+      '/api/sessions/ses-abc': {
+        ...mockSession,
+        projectId: 'proj-1',
+        activeRun: { runId: 'run-retry', status: 'RUNNING' },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('messages-area')).toBeTruthy());
+
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]!;
+
+    act(() => {
+      es.emit('status', JSON.stringify({ runId: 'run-retry', status: 'Retrying LLM request: attempt 2 of 5 after rate limited' }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('run-retry-indicator')).toBeTruthy());
+    expect(screen.getByTestId('run-retry-indicator').textContent).toContain('Agent still active: retrying request');
+    expect(screen.getByTestId('run-retry-indicator').textContent).toContain('rate limited');
+
+    act(() => {
+      es.emit('text-chunk', JSON.stringify({ runId: 'run-retry', chunk: 'Recovered answer' }));
+    });
+
+    await waitFor(() => expect(screen.queryByTestId('run-retry-indicator')).toBeNull());
+  });
+
   it('finalizes live text into message list on completed event', async () => {
     seedProjectState();
     mockChatFetch();
@@ -1187,6 +1220,35 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('assistant-message-0').textContent).toContain('Final answer');
   });
 
+  it('renders active-run replay thinking and tool activity after refresh', async () => {
+    seedProjectState();
+    mockChatFetch({
+      '/api/sessions/ses-abc': {
+        ...mockSession,
+        projectId: 'proj-1',
+        activeRun: { runId: 'run-replay', status: 'RUNNING' },
+        activeRunState: {
+          runId: 'run-replay',
+          transcript: [
+            { kind: 'thinking', content: 'Plan carefully' },
+            { kind: 'tool-input', toolName: 'glob', toolUseId: 'tool-2', argumentsJson: '{"pattern":"*.java"}' },
+            { kind: 'tool', toolName: 'glob', toolUseId: 'tool-2', argumentsJson: '{"pattern":"*.java"}', output: 'src/Main.java' },
+            { kind: 'assistant', content: 'Working on it' },
+          ],
+          lastSequence: 4,
+        },
+      },
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('messages-area')).toBeTruthy());
+
+    expect(screen.getByTestId('thinking-block-0').textContent).toContain('Plan carefully');
+    expect(screen.getByTestId('tool-input-block-1').textContent).toContain('Preparing glob');
+    expect(screen.getByTestId('inline-tool-block-2')).toBeTruthy();
+    expect(screen.getByTestId('live-output').textContent).toContain('Working on it');
+  });
+
   it('renders persisted completed-turn activity after session reload', async () => {
     seedProjectState();
     mockChatFetch({
@@ -1223,7 +1285,108 @@ describe('ChatPage', () => {
     expect(screen.getByTestId('persisted-file-summary-0').textContent).toContain('src/Main.java');
   });
 
-  it('cancels run and hides cancel button', async () => {
+  it('shows persisted activity after the first refresh triggered by completed event', async () => {
+    seedProjectState();
+    mockChatFetch();
+    const originalMock = (globalThis.fetch as ReturnType<typeof vi.fn>).getMockImplementation();
+    let sessionFetchCount = 0;
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/sessions/ses-abc' && !init?.method) {
+        sessionFetchCount += 1;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            ...mockSession,
+            projectId: 'proj-1',
+            messages: sessionFetchCount > 1
+              ? [{
+                  type: 'assistant',
+                  content: 'Completed answer',
+                  timestamp: '2026-04-07T10:01:05Z',
+                  rollbackIndex: null,
+                  activityTimeline: [
+                    { kind: 'thinking', content: 'Plan carefully' },
+                    { kind: 'tool', toolName: 'glob', toolUseId: 'tool-1', argumentsJson: '{"pattern":"*.java"}', output: 'src/Main.java' },
+                  ],
+                }]
+              : [],
+          }),
+        });
+      }
+      return originalMock?.(url, init) ?? Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('messages-area')).toBeTruthy());
+
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]!;
+
+    act(() => {
+      es.emit('text-chunk', JSON.stringify({ chunk: 'Completed answer' }));
+    });
+    act(() => {
+      es.emit('completed', JSON.stringify({ runId: 'run-1', finalText: 'Completed answer' }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('persisted-activity-0')).toBeTruthy());
+    expect(screen.getByTestId('persisted-activity-0-thinking-0').textContent).toContain('Plan carefully');
+    expect(screen.getByTestId('persisted-activity-0-tool-1')).toBeTruthy();
+    expect(sessionFetchCount).toBe(2);
+  });
+
+  it('keeps persisted activity visible when refresh returns both completed replay state and persisted assistant metadata', async () => {
+    seedProjectState();
+    mockChatFetch({
+      '/api/sessions/ses-abc': {
+        ...mockSession,
+        projectId: 'proj-1',
+        activeRun: null,
+        activeRunState: {
+          runId: 'run-1',
+          terminalStatus: 'COMPLETED',
+          finalText: 'Completed answer',
+          transcript: [
+            { kind: 'thinking', content: 'Plan carefully' },
+            { kind: 'assistant', content: 'Completed answer' },
+          ],
+          fileSummary: {
+            totalChanges: 1,
+            created: [],
+            modified: ['src/Main.java'],
+            deleted: [],
+          },
+        },
+        messages: [
+          {
+            type: 'assistant',
+            content: 'Completed answer',
+            timestamp: '2026-04-07T10:01:05Z',
+            rollbackIndex: null,
+            activityTimeline: [
+              { kind: 'thinking', content: 'Plan carefully' },
+              { kind: 'tool', toolName: 'glob', toolUseId: 'tool-1', argumentsJson: '{"pattern":"*.java"}', output: 'src/Main.java' },
+            ],
+            fileSummary: {
+              totalChanges: 1,
+              created: [],
+              modified: ['src/Main.java'],
+              deleted: [],
+            },
+          },
+        ],
+      },
+    });
+
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId('assistant-message-0')).toBeTruthy());
+    expect(screen.getByTestId('assistant-message-0').textContent).toContain('Completed answer');
+    expect(screen.getByTestId('persisted-activity-0-thinking-0').textContent).toContain('Plan carefully');
+    expect(screen.getByTestId('persisted-activity-0-tool-1')).toBeTruthy();
+    expect(screen.getByTestId('persisted-file-summary-0').textContent).toContain('src/Main.java');
+  });
+
+  it('cancels run from the composer stop button and restores send', async () => {
     seedProjectState();
     mockChatFetch({ '/api/sessions/ses-abc/runs': { runId: 'run-4', status: 'RUNNING' } });
 
@@ -1238,13 +1401,15 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => expect(screen.getByTestId('cancel-btn')).toBeTruthy());
+    expect(screen.getByTestId('stop-btn')).toBeTruthy();
     expect(screen.getByTestId('run-start-placeholder')).toBeTruthy();
 
     await act(async () => {
-      fireEvent.click(screen.getByTestId('cancel-btn'));
+      fireEvent.click(screen.getByTestId('stop-btn'));
     });
 
     await waitFor(() => expect(screen.queryByTestId('cancel-btn')).toBeNull());
+    expect(screen.getByTestId('send-btn').getAttribute('aria-label')).toBe('Send message');
     expect(screen.queryByTestId('run-start-placeholder')).toBeNull();
   });
 
@@ -1300,6 +1465,111 @@ describe('ChatPage', () => {
     });
 
     await waitFor(() => expect(screen.queryByTestId('pending-question-card')).toBeNull());
+  });
+
+  it('submits a selected predefined answer for a pending question', async () => {
+    seedProjectState();
+    mockChatFetch({ '/api/sessions/ses-abc': { ...mockSession, projectId: 'proj-1', activeRun: { runId: 'run-default', status: 'RUNNING' } } });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('messages-area')).toBeTruthy());
+
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]!;
+    act(() => {
+      es.emit('ask-user-question', JSON.stringify({
+        runId: 'run-default',
+        toolUseId: 'tool-question-choice',
+        question: 'Which file?',
+        choices: ['Project CLAUDE.md', 'Personal CLAUDE.local.md'],
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('pending-question-card')).toBeTruthy());
+
+    const projectChoice = screen.getByLabelText('Project CLAUDE.md') as HTMLInputElement;
+    fireEvent.click(projectChoice);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pending-question-submit'));
+    });
+
+    const answerCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.find(([url, init]) =>
+      url === '/api/sessions/ses-abc/runs/run-default/answer' && init?.method === 'POST');
+    expect(answerCall).toBeTruthy();
+    expect(answerCall?.[1]?.body).toBe(JSON.stringify({ toolUseId: 'tool-question-choice', answer: 'Project CLAUDE.md' }));
+    await waitFor(() => expect(screen.queryByTestId('pending-question-card')).toBeNull());
+  });
+
+  it('keeps the pending question visible when answer submission fails', async () => {
+    seedProjectState();
+    mockChatFetch({ '/api/sessions/ses-abc': { ...mockSession, projectId: 'proj-1', activeRun: { runId: 'run-default', status: 'RUNNING' } } });
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/sessions/ses-abc/runs/run-default/answer' && init?.method === 'POST') {
+        return Promise.resolve({ ok: false, status: 409, json: async () => ({ error: 'pending_question_not_found' }) });
+      }
+      if (url === '/api/sessions/ses-abc' && !init?.method) {
+        return Promise.resolve({ ok: true, json: async () => ({ ...mockSession, projectId: 'proj-1', activeRun: { runId: 'run-default', status: 'RUNNING' } }) });
+      }
+      if (url === '/api/projects/proj-1') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'proj-1',
+            name: 'Project One',
+            path: '/tmp/proj-1',
+            lastOpened: '2026-04-07T10:00:00Z',
+            createdAt: '2026-04-07T10:00:00Z',
+          }),
+        });
+      }
+      if (url === '/api/sessions?projectId=proj-1') {
+        return Promise.resolve({ ok: true, json: async () => ({ sessions: [{ ...mockSession, projectId: 'proj-1' }] }) });
+      }
+      if (url === '/api/sessions/ses-abc/runs' && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ runId: 'run-default', status: 'RUNNING', visiblePrompt: 'hello' }) });
+      }
+      if (url === '/api/commands') {
+        return Promise.resolve({ ok: true, json: async () => ([
+          { name: 'status', description: 'Show status', aliases: [], webCompatible: true, promptBacked: false },
+          { name: 'vim', description: 'Vim mode', aliases: [], webCompatible: false, promptBacked: false },
+        ]) });
+      }
+      if (url === '/api/references') {
+        return Promise.resolve({ ok: true, json: async () => mockReferences });
+      }
+      if (url === '/api/commands/execute' && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ prompt: '/status', output: 'Everything is healthy', success: true, commandName: 'status' }) });
+      }
+      if (url.startsWith('/api/sessions/ses-abc/runs/') && init?.method === 'DELETE') {
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('messages-area')).toBeTruthy());
+
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]!;
+    act(() => {
+      es.emit('ask-user-question', JSON.stringify({
+        runId: 'run-default',
+        toolUseId: 'tool-question-fail',
+        question: 'Which file?',
+        choices: ['Project CLAUDE.md', 'Personal CLAUDE.local.md'],
+      }));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('pending-question-card')).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText('Project CLAUDE.md'));
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('pending-question-submit'));
+    });
+
+    expect(screen.getByTestId('pending-question-card')).toBeTruthy();
+    expect((screen.getByLabelText('Project CLAUDE.md') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText('pending_question_not_found')).toBeTruthy();
   });
 
   it('renders persisted final text even without streamed chunks', async () => {
@@ -1382,7 +1652,7 @@ describe('ChatPage', () => {
 
     await waitFor(() => expect(screen.getByTestId('session-context-panel')).toBeTruthy());
     expect(screen.getByText('Context')).toBeTruthy();
-    expect(screen.getByText('Tree')).toBeTruthy();
+    expect(screen.getByText('Files')).toBeTruthy();
     expect(screen.getByText('Session Information')).toBeTruthy();
     expect(screen.getByText('Session Usage')).toBeTruthy();
     expect(screen.queryByText('Current Usage')).toBeNull();
@@ -1479,7 +1749,7 @@ describe('ChatPage', () => {
     fireEvent.click(screen.getByTestId('chat-session-context-btn'));
     await waitFor(() => expect(screen.getByTestId('session-context-panel')).toBeTruthy());
 
-    fireEvent.click(screen.getByText('Tree'));
+    fireEvent.click(screen.getByText('Files'));
     await waitFor(() => expect(screen.getByTestId('file-explorer')).toBeTruthy());
     expect(screen.getByText('Context')).toBeTruthy();
   });

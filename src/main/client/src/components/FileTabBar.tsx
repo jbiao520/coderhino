@@ -55,7 +55,7 @@ export default function FileTabBar({
             onClick={() => onSelectTab('tree')}
           >
             <span style={styles.tabIcon}><IconFrame><FolderIcon /></IconFrame></span>
-            <span>Tree</span>
+            <span>Files</span>
             {treeActionLabel ? (
               <span
                 className="tab-close-btn"

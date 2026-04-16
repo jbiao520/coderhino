@@ -170,6 +170,36 @@ describe('useStreamingSession', () => {
     ]);
   });
 
+  it('preserves replay transcript ordering for mixed active-run activity after refresh', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...mockSession,
+        activeRun: { runId: 'run-rich', status: 'RUNNING' },
+        activeRunState: {
+          runId: 'run-rich',
+          transcript: [
+            { kind: 'thinking', content: 'Plan carefully' },
+            { kind: 'tool-input', toolName: 'glob', toolUseId: 'tool-2', argumentsJson: '{"pattern":"*.java"}' },
+            { kind: 'tool', toolName: 'glob', toolUseId: 'tool-2', argumentsJson: '{"pattern":"*.java"}', output: 'src/Main.java' },
+            { kind: 'assistant', content: 'Working on it' },
+          ],
+          lastSequence: 4,
+        },
+      }),
+    });
+
+    const { result } = renderHook(() => useStreamingSession('ses-stream'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.runTranscript).toEqual([
+      { kind: 'thinking', content: 'Plan carefully' },
+      { kind: 'tool-input', toolName: 'glob', toolUseId: 'tool-2', partialJson: '{"pattern":"*.java"}' },
+      { kind: 'tool', toolName: 'glob', toolUseId: 'tool-2', input: { pattern: '*.java' }, output: 'src/Main.java' },
+      { kind: 'assistant', content: 'Working on it' },
+    ]);
+  });
+
   it('hydrates retry status transcript items from active run state', async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
@@ -194,6 +224,30 @@ describe('useStreamingSession', () => {
       { kind: 'status', content: 'Retrying LLM request: attempt 3 of 5 after service overloaded' },
       { kind: 'thinking', content: 'Trying alternate path' },
     ]);
+    expect(result.current.activeRetryStatus).toBeNull();
+  });
+
+  it('hydrates an active retry indicator from replay when retry is the latest active progress', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...mockSession,
+        activeRun: { runId: 'run-retry', status: 'RUNNING' },
+        activeRunState: {
+          runId: 'run-retry',
+          transcript: [
+            { kind: 'thinking', content: 'Working' },
+            { kind: 'status', content: 'Retrying LLM request: attempt 2 of 5 after rate limited' },
+          ],
+          lastSequence: 2,
+        },
+      }),
+    });
+
+    const { result } = renderHook(() => useStreamingSession('ses-stream'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.activeRetryStatus).toBe('Retrying LLM request: attempt 2 of 5 after rate limited');
   });
 
   it('hydrates persisted completed-turn activity onto assistant messages', async () => {
@@ -265,6 +319,7 @@ describe('useStreamingSession', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.pendingQuestion).toEqual({
+      runId: 'run-question',
       toolUseId: 'tool-q-1',
       question: 'Which guidance files?',
       choices: ['Project CLAUDE.md', 'Personal CLAUDE.local.md'],
@@ -331,6 +386,53 @@ describe('useStreamingSession', () => {
     expect(result.current.messages).toHaveLength(1);
     expect(result.current.messages[0]!.content).toBe('Done!');
     expect(result.current.messages[0]!.role).toBe('assistant');
+  });
+
+  it('uses the first post-completion refresh to hydrate persisted activity without retry heuristics', async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockSession,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ...mockSession,
+          messages: [
+            {
+              type: 'assistant',
+              content: 'Done!',
+              timestamp: '2026-04-07T10:01:05Z',
+              rollbackIndex: null,
+              activityTimeline: [
+                { kind: 'thinking', content: 'Plan carefully' },
+                { kind: 'tool', toolName: 'glob', toolUseId: 'tool-1', argumentsJson: '{"pattern":"*.java"}', output: 'src/Main.java' },
+              ],
+            },
+          ],
+        }),
+      });
+
+    const { result } = renderHook(() => useStreamingSession('ses-stream'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]!;
+
+    act(() => {
+      es.emit('text-chunk', JSON.stringify({ chunk: 'Done!' }));
+    });
+    act(() => {
+      es.emit('completed', JSON.stringify({ runId: 'run-1', finalText: 'Done!' }));
+    });
+
+    await waitFor(() => expect(result.current.messages[0]?.activityTimeline).not.toBeNull());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0]?.activityTimeline).toEqual([
+      { kind: 'thinking', content: 'Plan carefully' },
+      { kind: 'tool', toolName: 'glob', toolUseId: 'tool-1', input: { pattern: '*.java' }, output: 'src/Main.java' },
+    ]);
   });
 
   it('tracks tool-call and tool-result events', async () => {
@@ -428,6 +530,60 @@ describe('useStreamingSession', () => {
       { kind: 'status', content: 'Retrying LLM request: attempt 2 of 5 after service overloaded' },
       { kind: 'assistant', content: 'Recovered' },
     ]);
+    expect(result.current.activeRetryStatus).toBeNull();
+  });
+
+  it('shows active retry status until progress resumes', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...mockSession,
+        activeRun: { runId: 'run-retry', status: 'RUNNING' },
+      }),
+    });
+
+    const { result } = renderHook(() => useStreamingSession('ses-stream'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]!;
+
+    act(() => {
+      es.emit('status', JSON.stringify({ runId: 'run-retry', status: 'Retrying LLM request: attempt 2 of 5 after rate limited' }));
+    });
+
+    expect(result.current.activeRetryStatus).toBe('Retrying LLM request: attempt 2 of 5 after rate limited');
+
+    act(() => {
+      es.emit('text-chunk', JSON.stringify({ runId: 'run-retry', chunk: 'Recovered' }));
+    });
+
+    expect(result.current.activeRetryStatus).toBeNull();
+  });
+
+  it('clears active retry status on terminal events', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ...mockSession,
+        activeRun: { runId: 'run-retry', status: 'RUNNING' },
+      }),
+    });
+
+    const { result } = renderHook(() => useStreamingSession('ses-stream'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]!;
+
+    act(() => {
+      es.emit('status', JSON.stringify({ runId: 'run-retry', status: 'Retrying LLM request: attempt 2 of 5 after rate limited' }));
+    });
+    expect(result.current.activeRetryStatus).toBeTruthy();
+
+    act(() => {
+      es.emit('failed', JSON.stringify({ runId: 'run-retry', error: 'still failed' }));
+    });
+
+    expect(result.current.activeRetryStatus).toBeNull();
   });
 
   it('clears the inline transcript when a new run starts', async () => {
@@ -500,6 +656,46 @@ describe('useStreamingSession', () => {
       await result.current.cancelRun();
     });
 
+    expect(result.current.activeRun).toBeNull();
+  });
+
+  it('ignores duplicate cancel requests while cancellation is in flight', async () => {
+    let resolveCancel!: (value: Response | PromiseLike<Response>) => void;
+    (globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockSession })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ runId: 'run-cancel', status: 'RUNNING', visiblePrompt: 'do something' }),
+      })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveCancel = resolve;
+      }) as Promise<Response>);
+
+    const { result } = renderHook(() => useStreamingSession('ses-stream'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.submitMessage({ message: 'do something' });
+    });
+
+    act(() => {
+      void result.current.cancelRun();
+    });
+
+    await waitFor(() => expect(result.current.cancelingRun).toBe(true));
+
+    await act(async () => {
+      await result.current.cancelRun();
+    });
+
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as Array<[string, RequestInit | undefined]>;
+    expect(calls.filter(([url, init]) => url === '/api/sessions/ses-stream/runs/run-cancel' && init?.method === 'DELETE')).toHaveLength(1);
+
+    await act(async () => {
+      resolveCancel({ ok: true, json: async () => ({}) } as Response);
+    });
+
+    expect(result.current.cancelingRun).toBe(false);
     expect(result.current.activeRun).toBeNull();
   });
 
@@ -740,11 +936,44 @@ describe('useStreamingSession', () => {
     });
 
     expect(result.current.pendingQuestion?.toolUseId).toBe('tool-q-2');
+    expect(result.current.pendingQuestion?.runId).toBe('run-q');
 
     await act(async () => {
       await result.current.answerPendingQuestion('tool-q-2', 'B');
     });
 
+    expect(result.current.pendingQuestion).toBeNull();
+  });
+
+  it('answers a pending question using the pending question runId when activeRun is missing', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ...mockSession,
+          activeRun: null,
+          activeRunState: {
+            runId: 'run-q-fallback',
+            transcript: [],
+            pendingQuestion: {
+              toolUseId: 'tool-q-fallback',
+              question: 'Choose one',
+              choices: ['A', 'B'],
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ runId: 'run-q-fallback', status: 'RUNNING' }) });
+
+    const { result } = renderHook(() => useStreamingSession('ses-stream'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.answerPendingQuestion('tool-q-fallback', 'B');
+    });
+
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as Array<[string, RequestInit | undefined]>;
+    expect(calls.some(([url, init]) => url === '/api/sessions/ses-stream/runs/run-q-fallback/answer' && init?.method === 'POST')).toBe(true);
     expect(result.current.pendingQuestion).toBeNull();
   });
 
@@ -756,7 +985,9 @@ describe('useStreamingSession', () => {
       },
       messages: [],
       runTranscript: [],
+      activeRetryStatus: null,
       activeRun: { runId: 'run-a', status: 'RUNNING' },
+      cancelingRun: false,
       runStatus: 'running',
       error: null,
       loading: false,
@@ -799,7 +1030,9 @@ describe('useStreamingSession', () => {
       },
       messages: [],
       runTranscript: [{ kind: 'assistant', content: 'Thinking' }],
+      activeRetryStatus: null,
       activeRun: { runId: 'run-replay', status: 'RUNNING' },
+      cancelingRun: false,
       runStatus: 'running',
       error: null,
       loading: false,
@@ -835,7 +1068,9 @@ describe('reducer: out-of-order event hardening', () => {
     session: null,
     messages: [],
     runTranscript: [],
+    activeRetryStatus: null,
     activeRun: null,
+    cancelingRun: false,
     runStatus: 'idle',
     error: null,
     loading: false,

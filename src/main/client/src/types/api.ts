@@ -24,6 +24,7 @@ export interface ActiveRunTranscriptItemDto {
 }
 
 export interface PendingQuestionDto {
+  runId?: string | null;
   toolUseId: string;
   question: string;
   choices: string[];
@@ -345,8 +346,14 @@ export interface CredentialProviderDto {
   name: string;
   apiKeyMasked: string | null;
   apiBaseUrl: string | null;
-  models: string[];
+  models: CredentialProviderModelDto[];
+  apiType: 'CLAUDE_CODE' | 'OPENAI';
   hasApiKey: boolean;
+}
+
+export interface CredentialProviderModelDto {
+  id: string;
+  contextWindow: number;
 }
 
 export interface CredentialsUpdateRequest {
@@ -359,7 +366,8 @@ export interface CredentialProviderUpdate {
   name: string;
   apiKey?: string;
   apiBaseUrl?: string | null;
-  models: string[];
+  models: CredentialProviderModelDto[];
+  apiType: 'CLAUDE_CODE' | 'OPENAI';
 }
 
 export interface McpConfigDto {

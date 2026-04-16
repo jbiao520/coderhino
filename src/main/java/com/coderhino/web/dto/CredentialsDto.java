@@ -55,7 +55,10 @@ public class CredentialsDto {
         private String apiBaseUrl;
 
         @JsonProperty("models")
-        private List<String> models = new ArrayList<>();
+        private List<ModelDto> models = new ArrayList<>();
+
+        @JsonProperty("apiType")
+        private String apiType;
 
         @JsonProperty("hasApiKey")
         private boolean hasApiKey;
@@ -63,12 +66,13 @@ public class CredentialsDto {
         public ProviderDto() {
         }
 
-        public ProviderDto(String id, String name, String apiKeyMasked, String apiBaseUrl, List<String> models, boolean hasApiKey) {
+        public ProviderDto(String id, String name, String apiKeyMasked, String apiBaseUrl, List<ModelDto> models, String apiType, boolean hasApiKey) {
             this.id = id;
             this.name = name;
             this.apiKeyMasked = apiKeyMasked;
             this.apiBaseUrl = apiBaseUrl;
             this.models = models == null ? new ArrayList<>() : new ArrayList<>(models);
+            this.apiType = apiType;
             this.hasApiKey = hasApiKey;
         }
 
@@ -104,12 +108,20 @@ public class CredentialsDto {
             this.apiBaseUrl = apiBaseUrl;
         }
 
-        public List<String> getModels() {
+        public List<ModelDto> getModels() {
             return models;
         }
 
-        public void setModels(List<String> models) {
+        public void setModels(List<ModelDto> models) {
             this.models = models == null ? new ArrayList<>() : new ArrayList<>(models);
+        }
+
+        public String getApiType() {
+            return apiType;
+        }
+
+        public void setApiType(String apiType) {
+            this.apiType = apiType;
         }
 
         public boolean isHasApiKey() {
@@ -118,6 +130,39 @@ public class CredentialsDto {
 
         public void setHasApiKey(boolean hasApiKey) {
             this.hasApiKey = hasApiKey;
+        }
+
+        public static class ModelDto {
+
+            @JsonProperty("id")
+            private String id;
+
+            @JsonProperty("contextWindow")
+            private long contextWindow;
+
+            public ModelDto() {
+            }
+
+            public ModelDto(String id, long contextWindow) {
+                this.id = id;
+                this.contextWindow = contextWindow;
+            }
+
+            public String getId() {
+                return id;
+            }
+
+            public void setId(String id) {
+                this.id = id;
+            }
+
+            public long getContextWindow() {
+                return contextWindow;
+            }
+
+            public void setContextWindow(long contextWindow) {
+                this.contextWindow = contextWindow;
+            }
         }
     }
 }

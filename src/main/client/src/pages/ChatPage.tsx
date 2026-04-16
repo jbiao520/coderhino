@@ -26,6 +26,7 @@ import {
   PackageIcon,
   ServiceStatusIcon,
   SendIcon,
+  StopIcon,
 } from '../components/Icons';
 import { useTerminalPanelState } from '../hooks/useTerminalPanelState';
 import { getChatFontScopeStyle } from '../lib/webUiFontSettings';
@@ -340,10 +341,12 @@ export default function ChatPage({
     error,
     messages,
     runTranscript,
+    activeRetryStatus,
     activeRun,
     runStatus,
     submitMessage,
     cancelRun,
+    cancelingRun,
     rollbackToMessage,
     appendMessage,
     refreshSession,
@@ -409,6 +412,7 @@ export default function ChatPage({
   const lastReportedTerminalVisibleRef = useRef<boolean | null>(null);
   const syncingTerminalVisibilityRef = useRef(false);
   const isRunning = activeRun !== null;
+  const composerActionDisabled = isRunning ? cancelingRun : !inputValue.trim();
   const isWaitingForUser = activeRun?.status === 'WAITING_FOR_USER' || pendingQuestion !== null;
   const isReadCommandGenerating = readPlayback.status === 'generating';
   const showReadPlaybackControls = Boolean(readPlayback.url)
@@ -1067,6 +1071,9 @@ export default function ChatPage({
   }), [runTranscript, showThinkingDetails, showToolExecutions]);
   const showRunStartPlaceholder = isRunning && visibleRunTranscript.length === 0;
   const pendingQuestionRequiresCustomAnswer = !pendingQuestion || pendingQuestion.choices.length === 0 || pendingQuestionChoice === '__custom__';
+  const pendingQuestionAnswer = pendingQuestionRequiresCustomAnswer
+    ? pendingQuestionCustomAnswer.trim()
+    : pendingQuestionChoice;
 
   const visibleMessages = useMemo(() => {
     if (runStatus !== 'completed' || runTranscript.length === 0 || messages.length === 0) {
@@ -1074,7 +1081,9 @@ export default function ChatPage({
     }
 
     const lastMessage = messages[messages.length - 1];
-    if (lastMessage?.role === 'assistant' && lastMessage.content === currentRunText) {
+    const hasPersistedActivity = Boolean(lastMessage?.activityTimeline?.length)
+      || Boolean(lastMessage?.fileSummary && lastMessage.fileSummary.totalChanges > 0);
+    if (lastMessage?.role === 'assistant' && lastMessage.content === currentRunText && !hasPersistedActivity) {
       return messages.slice(0, -1);
     }
 
@@ -1241,20 +1250,17 @@ export default function ChatPage({
     if (!pendingQuestion) {
       return;
     }
-    const answer = pendingQuestionRequiresCustomAnswer
-      ? pendingQuestionCustomAnswer.trim()
-      : pendingQuestionChoice;
-    if (!answer) {
+    if (!pendingQuestionAnswer) {
       setSubmitError('Please answer the pending question before continuing.');
       return;
     }
     setSubmitError(null);
     try {
-      await answerPendingQuestion(pendingQuestion.toolUseId, answer);
+      await answerPendingQuestion(pendingQuestion.toolUseId, pendingQuestionAnswer);
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to submit answer');
     }
-  }, [answerPendingQuestion, pendingQuestion, pendingQuestionChoice, pendingQuestionCustomAnswer, pendingQuestionRequiresCustomAnswer]);
+  }, [answerPendingQuestion, pendingQuestion, pendingQuestionAnswer]);
 
   const toggleToolbarMenu = useCallback((menu: ToolbarMenu, trigger: HTMLElement) => {
     const next = openToolbarMenu === menu ? null : menu;
@@ -1614,7 +1620,7 @@ export default function ChatPage({
             </button>
           </div>
 
-          {isRunning && (
+        {isRunning && (
           <div style={styles.runBanner}>
             <div style={styles.runBannerStatus}>
               <span style={styles.runDot} />
@@ -1628,6 +1634,13 @@ export default function ChatPage({
             >
               Cancel
             </button>
+          </div>
+        )}
+
+        {isRunning && activeRetryStatus && (
+          <div style={styles.retryBanner} data-testid="run-retry-indicator">
+            <div style={styles.retryBannerTitle}>Agent still active: retrying request</div>
+            <div style={styles.retryBannerBody}>{activeRetryStatus}</div>
           </div>
         )}
 
@@ -1861,9 +1874,7 @@ export default function ChatPage({
                 onClick={() => {
                   void handlePendingQuestionSubmit();
                 }}
-                disabled={pendingQuestionRequiresCustomAnswer
-                  ? pendingQuestionCustomAnswer.trim().length === 0
-                  : pendingQuestionChoice.length === 0}
+                disabled={pendingQuestionAnswer.length === 0}
                 data-testid="pending-question-submit"
               >
                 Submit answer
@@ -1941,17 +1952,24 @@ export default function ChatPage({
                 }}
               />
             </div>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={styles.sendBtn(isRunning || !inputValue.trim())}
-              disabled={isRunning || !inputValue.trim()}
-              data-testid="send-btn"
-              aria-label="Send message"
-              title="Send message"
-            >
-              <IconFrame><SendIcon /></IconFrame>
-            </button>
+              <button
+                type="button"
+                className={isRunning ? 'btn btn-danger' : 'btn btn-primary'}
+                style={styles.sendBtn(composerActionDisabled, isRunning)}
+                disabled={composerActionDisabled}
+                onClick={(event) => {
+                  if (isRunning) {
+                    void handleCancel();
+                    return;
+                  }
+                  void handleSubmit(event as unknown as React.FormEvent);
+                }}
+                data-testid={isRunning ? 'stop-btn' : 'send-btn'}
+                aria-label={isRunning ? 'Stop run' : 'Send message'}
+                title={isRunning ? 'Stop run' : 'Send message'}
+              >
+                <IconFrame>{isRunning ? <StopIcon /> : <SendIcon />}</IconFrame>
+              </button>
           </div>
           {submitError && <span style={styles.submitError}>{submitError}</span>}
           <div style={styles.composerToolbar} data-testid="composer-toolbar" ref={toolbarRef}>
@@ -2220,6 +2238,7 @@ const styles = {
     color: 'var(--text)',
     height: '100%',
     width: '100%',
+    minWidth: 0,
     boxSizing: 'border-box' as const,
     overflow: 'hidden',
   } as React.CSSProperties,
@@ -2234,6 +2253,7 @@ const styles = {
   } as React.CSSProperties,
   mainColumnConstrained: {
     flex: 1,
+    minWidth: 0,
     padding: '24px 32px',
     maxWidth: 900,
     display: 'flex',
@@ -2244,6 +2264,7 @@ const styles = {
   } as React.CSSProperties,
   mainColumnExpanded: {
     flex: 1,
+    minWidth: 0,
     padding: '24px 32px',
     maxWidth: 'none',
     display: 'flex',
@@ -2329,6 +2350,28 @@ const styles = {
     borderRadius: 'var(--radius-md)',
     fontSize: 'var(--chat-font-size)',
     color: 'var(--accent)',
+  } as React.CSSProperties,
+  retryBanner: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+    padding: '10px 14px',
+    background: 'rgba(191,90,36,0.1)',
+    border: '1px solid rgba(191,90,36,0.24)',
+    boxShadow: 'var(--shadow-sm)',
+    borderRadius: 'var(--radius-md)',
+  } as React.CSSProperties,
+  retryBannerTitle: {
+    fontSize: 'calc(var(--chat-font-size) - 1px)',
+    fontWeight: 700,
+    color: 'var(--orange, #bf5a24)',
+  } as React.CSSProperties,
+  retryBannerBody: {
+    fontSize: 'calc(var(--chat-font-size) - 2px)',
+    lineHeight: 1.4,
+    color: 'var(--text-muted)',
+    whiteSpace: 'pre-wrap' as const,
+    wordBreak: 'break-word' as const,
   } as React.CSSProperties,
   runBannerStatus: {
     display: 'flex',
@@ -2893,7 +2936,7 @@ const styles = {
     fontSize: 'calc(var(--chat-font-size) - 1px)',
     color: 'var(--red)',
   } as React.CSSProperties,
-  sendBtn: (disabled: boolean) =>
+  sendBtn: (disabled: boolean, danger = false) =>
     ({
       width: 36,
       height: 36,
@@ -2909,5 +2952,9 @@ const styles = {
       borderRadius: '999px',
       fontSize: 16,
       fontWeight: 600,
+      background: disabled
+        ? 'var(--bg)'
+        : (danger ? 'var(--red)' : 'var(--accent)'),
+      boxShadow: disabled ? 'none' : 'var(--shadow-sm)',
     }) as React.CSSProperties,
 };

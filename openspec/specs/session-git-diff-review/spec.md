@@ -1,5 +1,6 @@
-## ADDED Requirements
-
+## Purpose
+Support reviewing file-specific git changes in the web session UI, including diff display, context expansion, and full-file comparison.
+## Requirements
 ### Requirement: Open file diff from session git panel
 The system SHALL allow the user to select a tracked change from the session git panel and open a full-size popup that displays the diff for that file in the active session worktree.
 
@@ -107,3 +108,72 @@ The git diff review popup SHALL use the available viewport more aggressively tha
 - **WHEN** the user opens git diff review on a smaller viewport
 - **THEN** the popup remains within the visible viewport bounds
 - **THEN** the diff viewer remains usable without content clipping outside the screen
+
+### Requirement: Session git panel visually differentiates change types
+The session git panel SHALL render each tracked and unversioned git entry with status-aware visual treatment so users can quickly distinguish change kinds without relying on a plain file list.
+
+#### Scenario: Render modified tracked file with distinct change treatment
+- **WHEN** the session git panel shows a tracked file whose normalized status includes `modified`
+- **THEN** the row displays a change-type icon or badge for the modified state
+- **THEN** the row uses a distinct visual accent from added, deleted, and unversioned entries
+
+#### Scenario: Render deleted tracked file with distinct change treatment
+- **WHEN** the session git panel shows a tracked file whose normalized status includes `deleted`
+- **THEN** the row displays a change-type icon or badge for the deleted state
+- **THEN** the row uses a distinct visual accent from modified, added, and unversioned entries
+
+#### Scenario: Render unversioned file with distinct change treatment
+- **WHEN** the session git panel shows an unversioned file entry
+- **THEN** the row displays change-type metadata indicating that the file is unversioned or new
+- **THEN** the row uses a distinct visual accent from tracked modified and deleted entries
+
+### Requirement: Session git panel preserves file-type context alongside change state
+The session git panel SHALL present file-type metadata and git change metadata together for each git entry.
+
+#### Scenario: Render file-type icon and change-type metadata together
+- **WHEN** the session git panel shows a file with a recognized extension such as `.tsx` or `.md`
+- **THEN** the row displays the file-type icon next to the file path
+- **THEN** the row also displays separate change-type metadata without replacing the file-type icon
+
+#### Scenario: Render fallback file-type icon with change metadata
+- **WHEN** the session git panel shows a file whose extension is not mapped to a specialized icon
+- **THEN** the row displays the default file icon
+- **THEN** the row still displays the change-type metadata for the git entry
+
+### Requirement: Expand session git diff context on demand
+The system SHALL allow the user to request additional surrounding lines for the currently selected file while reviewing a session git diff.
+
+#### Scenario: Expand tracked file diff context
+- **WHEN** the user opens git diff review for a tracked file and requests more context
+- **THEN** the system keeps the popup open for the same file
+- **THEN** the system loads a new diff response with more surrounding lines than the current view
+- **THEN** the popup displays the expanded diff content after loading completes
+
+#### Scenario: Expand unversioned file diff context
+- **WHEN** the user opens git diff review for an unversioned file and requests more context
+- **THEN** the system keeps the popup open for the same file
+- **THEN** the system loads a diff response that includes additional surrounding lines from the file content when available
+- **THEN** the popup updates to the expanded diff view without closing or switching files
+
+### Requirement: Diff popup communicates context expansion availability
+The system SHALL show whether additional diff context can still be requested for the selected file.
+
+#### Scenario: More diff context is available
+- **WHEN** the popup shows a diff response that indicates more surrounding lines are available
+- **THEN** the popup displays an action that allows the user to request more context
+
+#### Scenario: Diff is fully expanded
+- **WHEN** the popup shows a diff response that indicates no more surrounding lines are available
+- **THEN** the popup does not present an active expand action for that file
+
+### Requirement: Backend accepts session diff context requests
+The backend SHALL accept file-specific session diff requests with an explicit context size and return the applied context metadata with the diff payload.
+
+#### Scenario: Request file diff with custom context
+- **WHEN** the client requests session git diff review for a valid file path and includes a context size
+- **THEN** the backend responds with the file path, diff text, and the applied context size for that file
+
+#### Scenario: Request file diff with no remaining context
+- **WHEN** the client requests session git diff review for a valid file path and the response already includes the full available context
+- **THEN** the backend indicates in the response that no more context is available for additional expansion
+

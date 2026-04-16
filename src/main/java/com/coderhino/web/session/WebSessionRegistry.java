@@ -297,7 +297,7 @@ public class WebSessionRegistry {
 
     private String resolveInitialModel(com.coderhino.web.credentials.ApiCredentials.ApiProvider provider) {
         if (provider != null && provider.getModels() != null && !provider.getModels().isEmpty()) {
-            return provider.getModels().get(0);
+            return provider.getModels().get(0).getId();
         }
         var settingsModel = settingsService.load().getDefaultModel();
         if (settingsModel != null && !settingsModel.isBlank()) {

@@ -1,5 +1,6 @@
 package com.coderhino.web.service;
 
+import com.coderhino.query.ModelClient;
 import com.coderhino.query.ModelClientFactory;
 import com.coderhino.query.QueryEngine;
 import com.coderhino.state.SessionStore;
@@ -43,6 +44,7 @@ public class RunExecutionService {
     private final CompletionNotificationStore completionNotificationStore;
     private final SessionStore sessionStore;
     private final java.util.Map<String, SseQueryEventSink> activeSinks = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Map<String, Thread> activeThreads = new java.util.concurrent.ConcurrentHashMap<>();
 
     public RunExecutionService(SessionEventBus eventBus, WebSessionRegistry sessionRegistry) {
         this(eventBus, sessionRegistry, ServiceRegistry.createDefault(Path.of("").toAbsolutePath().normalize()), new CompletionNotificationStore());
@@ -76,13 +78,14 @@ public class RunExecutionService {
 
     @Async
     public void executeAsync(WebSession session, String runId, String input, String visiblePrompt) {
+        activeThreads.put(runId, Thread.currentThread());
         var sessionUuid = toUuid(session.getSessionId());
         var projectId = sessionRegistry.getProjectIdForSession(session.getSessionId()).orElse(null);
-        var sink = new SseQueryEventSink(session.getSessionId(), runId, eventBus, fileChangeTracker, sessionUuid, session.getBootstrapState(), session, projectId);
+        var sink = new SseQueryEventSink(session.getSessionId(), runId, eventBus, fileChangeTracker, sessionUuid, session.getBootstrapState(), session, projectId, sessionStore);
         activeSinks.put(runId, sink);
         try {
             var config = createProviderConfigResolver().resolve(session.getProviderId(), session.getAppState().model());
-            var modelClient = ModelClientFactory.create(config.getModel(), config.getApiKey(), config.getBaseUrl());
+            var modelClient = createModelClient(config);
             var engine = new QueryEngine(
                 ToolRegistry.createDefault(),
                 modelClient,
@@ -95,14 +98,10 @@ public class RunExecutionService {
             try (var ignored = TaskOriginContext.open(projectId, session.getSessionId())) {
                 engine.execute(session.getBootstrapState(), input, visiblePrompt, sink);
             }
+            if (sink.isCancelled()) {
+                return;
+            }
             if (runId.equals(session.getActiveRunId())) {
-                var completedTurnActivity = session.snapshotCompletedTurnActivity();
-                if (completedTurnActivity != null && sessionStore != null) {
-                    session.getBootstrapState().update(state -> state.withSessionRuntime(
-                        state.sessionRuntime().appendCompletedTurnActivity(completedTurnActivity)
-                    ));
-                    sessionStore.appendCompletedTurnActivity(session.getBootstrapState().get(), completedTurnActivity);
-                }
                 completionNotificationStore.recordAiRunCompletion(runId, session.getSessionId(), projectId, java.time.Instant.now());
                 session.setCurrentRunStatus(RunDto.RunStatus.COMPLETED);
                 session.getActiveRun().set(false);
@@ -114,6 +113,9 @@ public class RunExecutionService {
                 sessionRegistry.autoNameSession(session);
             }
         } catch (Exception e) {
+            if (sink.isCancelled() || e instanceof java.util.concurrent.CancellationException) {
+                return;
+            }
             sink.onError(e.getMessage());
             if (runId.equals(session.getActiveRunId())) {
                 session.setCurrentRunStatus(RunDto.RunStatus.FAILED);
@@ -124,7 +126,22 @@ public class RunExecutionService {
             }
         } finally {
             activeSinks.remove(runId, sink);
+            activeThreads.remove(runId, Thread.currentThread());
         }
+    }
+
+    public boolean cancelRun(String runId) {
+        var sink = activeSinks.get(runId);
+        var thread = activeThreads.get(runId);
+        var cancelled = false;
+        if (sink != null) {
+            cancelled = sink.cancel();
+        }
+        if (thread != null) {
+            thread.interrupt();
+            cancelled = true;
+        }
+        return cancelled;
     }
 
     public boolean answerPendingQuestion(String runId, String toolUseId, String answer) {
@@ -147,5 +164,15 @@ public class RunExecutionService {
 
     protected ProviderConfigResolver createProviderConfigResolver() {
         return new ProviderConfigResolver();
+    }
+
+    protected ModelClient createModelClient(ProviderConfigResolver.ResolvedConfig config) {
+        return ModelClientFactory.create(
+            config.getModel(),
+            config.getApiKey(),
+            config.getBaseUrl(),
+            config.getApiType(),
+            config.getContextWindow()
+        );
     }
 }

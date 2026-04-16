@@ -3,9 +3,11 @@ package com.coderhino.web.credentials;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonProperty.Access;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -103,6 +105,11 @@ public class ApiCredentials {
 
     public static class ApiProvider {
 
+        public static final long DEFAULT_CONTEXT_WINDOW = 128000L;
+
+        public static final String API_TYPE_CLAUDE_CODE = "CLAUDE_CODE";
+        public static final String API_TYPE_OPENAI = "OPENAI";
+
         @JsonProperty("id")
         private String id;
 
@@ -116,17 +123,25 @@ public class ApiCredentials {
         private String apiBaseUrl;
 
         @JsonProperty("models")
-        private List<String> models = new ArrayList<>();
+        private List<ModelConfig> models = new ArrayList<>();
+
+        @JsonProperty("apiType")
+        private String apiType = API_TYPE_CLAUDE_CODE;
 
         public ApiProvider() {
         }
 
-        public ApiProvider(String id, String name, String apiKey, String apiBaseUrl, List<String> models) {
+        public ApiProvider(String id, String name, String apiKey, String apiBaseUrl, List<ModelConfig> models) {
+            this(id, name, apiKey, apiBaseUrl, models, API_TYPE_CLAUDE_CODE);
+        }
+
+        public ApiProvider(String id, String name, String apiKey, String apiBaseUrl, List<ModelConfig> models, String apiType) {
             this.id = id;
             this.name = name;
             this.apiKey = apiKey;
             this.apiBaseUrl = apiBaseUrl;
             setModels(models);
+            setApiType(apiType);
         }
 
         public String getId() {
@@ -161,20 +176,142 @@ public class ApiCredentials {
             this.apiBaseUrl = blankToNull(apiBaseUrl);
         }
 
-        public List<String> getModels() {
+        public List<ModelConfig> getModels() {
             return models;
         }
 
-        public void setModels(List<String> models) {
+        public void setModels(List<ModelConfig> models) {
             this.models = new ArrayList<>();
             if (models == null) {
                 return;
             }
             for (var model : models) {
-                var trimmed = blankToNull(model);
-                if (trimmed != null) {
-                    this.models.add(trimmed);
+                var normalized = ModelConfig.normalize(model);
+                if (normalized != null) {
+                    this.models.add(normalized);
                 }
+            }
+        }
+
+        @JsonProperty("models")
+        void readModelsFromJson(List<JsonNode> rawModels) {
+            this.models = new ArrayList<>();
+            if (rawModels == null) {
+                return;
+            }
+            for (var rawModel : rawModels) {
+                var normalized = ModelConfig.fromJson(rawModel);
+                if (normalized != null) {
+                    this.models.add(normalized);
+                }
+            }
+        }
+
+        @JsonIgnore
+        public List<String> getModelIds() {
+            return models.stream().map(ModelConfig::getId).toList();
+        }
+
+        @JsonIgnore
+        public ModelConfig findModel(String modelId) {
+            if (modelId == null || models == null) {
+                return null;
+            }
+            for (var model : models) {
+                if (model != null && Objects.equals(modelId, model.getId())) {
+                    return model;
+                }
+            }
+            return null;
+        }
+
+        public String getApiType() {
+            return apiType;
+        }
+
+        public void setApiType(String apiType) {
+            this.apiType = normalizeApiType(apiType);
+        }
+
+        public static String normalizeApiType(String apiType) {
+            if (apiType == null || apiType.isBlank()) {
+                return API_TYPE_CLAUDE_CODE;
+            }
+            var normalized = apiType.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+            if (API_TYPE_OPENAI.equals(normalized)) {
+                return API_TYPE_OPENAI;
+            }
+            return API_TYPE_CLAUDE_CODE;
+        }
+
+        public static class ModelConfig {
+
+            @JsonProperty("id")
+            private String id;
+
+            @JsonProperty("contextWindow")
+            private long contextWindow = DEFAULT_CONTEXT_WINDOW;
+
+            public ModelConfig() {
+            }
+
+            public ModelConfig(String id, Long contextWindow) {
+                setId(id);
+                setContextWindow(contextWindow);
+            }
+
+            public String getId() {
+                return id;
+            }
+
+            public void setId(String id) {
+                this.id = blankToNull(id);
+            }
+
+            public long getContextWindow() {
+                return contextWindow;
+            }
+
+            public void setContextWindow(Long contextWindow) {
+                this.contextWindow = normalizeContextWindow(contextWindow);
+            }
+
+            public static long normalizeContextWindow(Long contextWindow) {
+                if (contextWindow == null || contextWindow <= 0) {
+                    return DEFAULT_CONTEXT_WINDOW;
+                }
+                return contextWindow;
+            }
+
+            static ModelConfig normalize(ModelConfig model) {
+                if (model == null) {
+                    return null;
+                }
+                var id = blankToNull(model.getId());
+                if (id == null) {
+                    return null;
+                }
+                return new ModelConfig(id, model.getContextWindow());
+            }
+
+            static ModelConfig fromJson(JsonNode node) {
+                if (node == null || node.isNull()) {
+                    return null;
+                }
+                if (node.isTextual()) {
+                    return new ModelConfig(node.asText(), DEFAULT_CONTEXT_WINDOW);
+                }
+                if (!node.isObject()) {
+                    return null;
+                }
+                var idNode = node.get("id");
+                var id = idNode == null ? null : idNode.asText(null);
+                Long contextWindow = null;
+                var contextWindowNode = node.get("contextWindow");
+                if (contextWindowNode != null && contextWindowNode.canConvertToLong()) {
+                    contextWindow = contextWindowNode.asLong();
+                }
+                return normalize(new ModelConfig(id, contextWindow));
             }
         }
     }

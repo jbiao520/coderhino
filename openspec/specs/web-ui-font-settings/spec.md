@@ -4,11 +4,11 @@
 TBD - created by archiving change add-web-ui-font-settings. Update Purpose after archive.
 ## Requirements
 ### Requirement: General settings expose web UI font controls
-The system SHALL provide font controls in the General settings tab for the project sidebar and chat page. The controls MUST allow the user to configure each surface independently and MUST submit through the existing web settings save flow.
+The system SHALL provide font controls in the General settings section for the project sidebar and chat page. The controls MUST allow the user to configure each surface independently and MUST submit through the existing web settings save flow.
 
 #### Scenario: General settings show separate sidebar and chat font controls
-- **WHEN** the user opens the General settings tab
-- **THEN** the UI displays project sidebar font controls and chat page font controls as distinct settings groups
+- **WHEN** the user navigates to the General settings section
+- **THEN** the UI displays project sidebar font controls and chat page font controls as distinct settings groups, adhering to the new modern design guidelines
 
 #### Scenario: Font settings save through web settings API
 - **WHEN** the user changes a sidebar or chat font setting and saves the General settings form

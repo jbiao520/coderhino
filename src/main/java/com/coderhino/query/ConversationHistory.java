@@ -10,16 +10,32 @@ final class ConversationHistory {
     ConversationHistory() {
     }
 
-    ArrayList<Message> build(BootstrapState bootstrapState, String userInput) {
+    record CurrentTurn(String visibleUserInput, String rawUserInput) {
+        CurrentTurn {
+            if (visibleUserInput == null || rawUserInput == null) {
+                throw new IllegalArgumentException("Current turn inputs must be non-null");
+            }
+        }
+    }
+
+    ArrayList<Message> build(BootstrapState bootstrapState, CurrentTurn currentTurn) {
         var history = new ArrayList<Message>();
         var messages = bootstrapState.get().messages();
-        var alreadyPresentAsLatestUserMessage = !messages.isEmpty()
-            && messages.get(messages.size() - 1) instanceof Message.UserMessage userMessage
-            && userMessage.content().equals(userInput);
         history.addAll(messages);
-        if (!alreadyPresentAsLatestUserMessage) {
-            history.add(new Message.UserMessage(userInput));
+
+        if (history.isEmpty()) {
+            history.add(new Message.UserMessage(currentTurn.rawUserInput()));
+            return history;
         }
+
+        var lastMessage = history.get(history.size() - 1);
+        if (lastMessage instanceof Message.UserMessage userMessage
+            && userMessage.content().equals(currentTurn.visibleUserInput())) {
+            history.set(history.size() - 1, new Message.UserMessage(currentTurn.rawUserInput()));
+            return history;
+        }
+
+        history.add(new Message.UserMessage(currentTurn.rawUserInput()));
         return history;
     }
 

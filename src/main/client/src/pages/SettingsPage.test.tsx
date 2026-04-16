@@ -21,7 +21,11 @@ const mockCredentials = {
       name: 'MiniMax',
       apiKeyMasked: '****abcd',
       apiBaseUrl: 'https://api.example.com',
-      models: ['MiniMax-M2.7', 'MiniMax-M2.5'],
+      models: [
+        { id: 'MiniMax-M2.7', contextWindow: 128000 },
+        { id: 'MiniMax-M2.5', contextWindow: 256000 },
+      ],
+      apiType: 'CLAUDE_CODE',
       hasApiKey: true,
     },
   ],
@@ -221,7 +225,8 @@ describe('SettingsPage', () => {
           name: 'OpenAI',
           apiKeyMasked: '****wxyz',
           apiBaseUrl: 'https://api.openai.com/v1',
-          models: ['gpt-4o'],
+          models: [{ id: 'gpt-4o', contextWindow: 64000 }],
+          apiType: 'OPENAI',
           hasApiKey: true,
         },
       ],
@@ -250,7 +255,10 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByTestId('add-provider-btn'));
     fireEvent.change(screen.getByTestId('provider-name-input-provider-2'), { target: { value: 'OpenAI' } });
     fireEvent.change(screen.getByTestId('provider-base-url-input-provider-2'), { target: { value: 'https://api.openai.com/v1' } });
-    fireEvent.change(screen.getByTestId('provider-models-input-provider-2'), { target: { value: 'gpt-4o' } });
+    fireEvent.click(screen.getByTestId('add-provider-model-btn-provider-2'));
+    fireEvent.change(screen.getByTestId('provider-model-id-input-provider-2-0'), { target: { value: 'gpt-4o' } });
+    fireEvent.change(screen.getByTestId('provider-model-context-window-input-provider-2-0'), { target: { value: '64000' } });
+    fireEvent.change(screen.getByTestId('provider-api-type-input-provider-2'), { target: { value: 'OPENAI' } });
     fireEvent.change(screen.getByTestId('default-provider-select'), { target: { value: 'provider-2' } });
     fireEvent.submit(screen.getByTestId('credentials-form'));
 
@@ -267,16 +275,45 @@ describe('SettingsPage', () => {
             id: 'provider-1',
             name: 'MiniMax',
             apiBaseUrl: 'https://api.example.com',
-            models: ['MiniMax-M2.7', 'MiniMax-M2.5'],
+            models: [
+              { id: 'MiniMax-M2.7', contextWindow: 128000 },
+              { id: 'MiniMax-M2.5', contextWindow: 256000 },
+            ],
+            apiType: 'CLAUDE_CODE',
           },
           {
             id: 'provider-2',
             name: 'OpenAI',
             apiBaseUrl: 'https://api.openai.com/v1',
-            models: ['gpt-4o'],
+            models: [{ id: 'gpt-4o', contextWindow: 64000 }],
+            apiType: 'OPENAI',
           },
         ],
       }));
+    });
+  });
+
+  it('adds model rows with default context window and normalizes invalid values before save', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('settings-tab-providers')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('settings-tab-providers'));
+    await waitFor(() => expect(screen.getByTestId('add-provider-model-btn-provider-1')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('add-provider-model-btn-provider-1'));
+    expect((screen.getByTestId('provider-model-context-window-input-provider-1-2') as HTMLInputElement).value).toBe('128000');
+
+    fireEvent.change(screen.getByTestId('provider-model-id-input-provider-1-2'), { target: { value: 'MiniMax-M2.1' } });
+    fireEvent.change(screen.getByTestId('provider-model-context-window-input-provider-1-2'), { target: { value: '' } });
+    fireEvent.submit(screen.getByTestId('credentials-form'));
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      const putCall = calls.find(
+        (c: unknown[]) => Array.isArray(c) && c[0] === '/api/credentials' && c[1] && (c[1] as RequestInit).method === 'PUT',
+      );
+      expect(putCall).toBeTruthy();
+      expect((putCall?.[1] as RequestInit).body).toContain('"contextWindow":128000');
     });
   });
 

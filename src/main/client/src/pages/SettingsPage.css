@@ -319,6 +319,23 @@
   gap: 12px;
 }
 
+.settings-provider-models {
+  grid-column: 1 / -1;
+}
+
+.settings-provider-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-provider-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(140px, 0.8fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .settings-inline-row {
   display: flex;
   align-items: center;
@@ -416,7 +433,8 @@
   }
 
   .settings-inline-row,
-  .settings-card-header-inline {
+  .settings-card-header-inline,
+  .settings-provider-model-row {
     flex-direction: column;
     align-items: stretch;
   }

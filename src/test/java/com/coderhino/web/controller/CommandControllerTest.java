@@ -6,6 +6,9 @@ import com.coderhino.commands.CommandRegistry;
 import com.coderhino.commands.MarkdownCommandDefinition;
 import com.coderhino.commands.MarkdownPromptDefinition;
 import com.coderhino.commands.PromptBackedCommand;
+import com.coderhino.query.ModelClient;
+import com.coderhino.query.ModelResponse;
+import com.coderhino.query.QueryRequest;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.services.lsp.LspClientManager;
 import com.coderhino.services.mcp.McpConnectionManager;
@@ -199,6 +202,46 @@ class CommandControllerTest {
     }
 
     @Test
+    void promptBackedCommandPersistsVisibleTurnButSendsExpandedPromptToModel(@TempDir Path tempDir) throws Exception {
+        var sessionRegistry = sessionRegistry(tempDir);
+        var session = WebSession.create("ses-prompt", tempDir.resolve("workspace"));
+        putSession(sessionRegistry, session);
+
+        QueryRequest[] captured = new QueryRequest[1];
+        var controller = new TestableCommandController(
+            new CommandRegistry(List.of(
+                new PromptStubCommand("init", "Initialize", List.of(), false, true, "inspect repo first: $ARGUMENTS", List.of("bash"))
+            )),
+            bootstrapState(tempDir.resolve("fallback")),
+            sessionStore(tempDir),
+            serviceRegistry(tempDir),
+            sessionRegistry,
+            new ReadCommandWebService(new CommandAudioStore()),
+            new CommandAudioStore(),
+            (bootstrapState, request) -> {
+                captured[0] = request;
+                return new ModelResponse.AssistantReply("planned response");
+            }
+        );
+
+        var response = controller.executeCommand(new com.coderhino.web.dto.CommandExecuteRequest("init", List.of("project"), "ses-prompt"));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        var body = assertInstanceOf(com.coderhino.web.dto.CommandExecuteResponse.class, response.getBody());
+        assertEquals("/init project", body.prompt());
+        assertEquals("planned response", body.output());
+
+        var messages = session.getAppState().messages();
+        assertEquals(2, messages.size());
+        assertEquals("/init project", messages.get(0).content());
+        assertEquals("planned response", messages.get(1).content());
+
+        assertNotNull(captured[0]);
+        assertEquals(1, captured[0].messages().stream().filter(com.coderhino.types.Message.UserMessage.class::isInstance).count());
+        assertEquals("inspect repo first: project", captured[0].messages().get(0).content());
+    }
+
+    @Test
     void executeCommandReturnsAudioMetadataForReadCommand(@TempDir Path tempDir) {
         var audioStore = new CommandAudioStore();
         var controller = new CommandController(
@@ -385,6 +428,29 @@ class CommandControllerTest {
 
     private static Path tempPath(String value) {
         return Path.of(value);
+    }
+
+    private static final class TestableCommandController extends CommandController {
+        private final ModelClient modelClient;
+
+        private TestableCommandController(
+            CommandRegistry commandRegistry,
+            BootstrapState bootstrapState,
+            SessionStore sessionStore,
+            ServiceRegistry serviceRegistry,
+            WebSessionRegistry sessionRegistry,
+            ReadCommandWebService readCommandWebService,
+            CommandAudioStore commandAudioStore,
+            ModelClient modelClient
+        ) {
+            super(commandRegistry, bootstrapState, sessionStore, serviceRegistry, sessionRegistry, readCommandWebService, commandAudioStore);
+            this.modelClient = modelClient;
+        }
+
+        @Override
+        protected ModelClient createModelClient(com.coderhino.web.credentials.ProviderConfigResolver.ResolvedConfig config) {
+            return modelClient;
+        }
     }
 
     private static CommandController controller(CommandRegistry registry, Path tempDir) {

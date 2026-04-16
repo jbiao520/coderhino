@@ -10,7 +10,10 @@ const mockCredentials = {
       name: 'MiniMax',
       apiKeyMasked: '****abcd',
       apiBaseUrl: 'https://api.example.com',
-      models: ['MiniMax-M2.7', 'MiniMax-M2.5'],
+      models: [
+        { id: 'MiniMax-M2.7', contextWindow: 128000 },
+        { id: 'MiniMax-M2.5', contextWindow: 256000 },
+      ],
       hasApiKey: true,
     },
   ],
@@ -33,7 +36,10 @@ describe('useCredentials', () => {
     expect(result.current.credentials?.defaultProviderId).toBe('provider-1');
     expect(result.current.credentials?.providers[0]?.apiKeyMasked).toBe('****abcd');
     expect(result.current.credentials?.providers[0]?.apiBaseUrl).toBe('https://api.example.com');
-    expect(result.current.credentials?.providers[0]?.models).toEqual(['MiniMax-M2.7', 'MiniMax-M2.5']);
+    expect(result.current.credentials?.providers[0]?.models).toEqual([
+      { id: 'MiniMax-M2.7', contextWindow: 128000 },
+      { id: 'MiniMax-M2.5', contextWindow: 256000 },
+    ]);
     expect(result.current.credentials?.providers[0]?.hasApiKey).toBe(true);
     expect(result.current.error).toBeNull();
   });
@@ -75,7 +81,11 @@ describe('useCredentials', () => {
             id: 'provider-1',
             name: 'MiniMax',
             apiBaseUrl: 'https://new-api.example.com',
-            models: ['MiniMax-M2.7', 'MiniMax-M2.5'],
+            models: [
+              { id: 'MiniMax-M2.7', contextWindow: 128000 },
+              { id: 'MiniMax-M2.5', contextWindow: 256000 },
+            ],
+            apiType: 'CLAUDE_CODE',
           },
         ],
       });

@@ -4,8 +4,15 @@ import { useSettings } from '../hooks/useSettings';
 import { useCredentials } from '../hooks/useCredentials';
 import { useMcpConfig } from '../hooks/useMcpConfig';
 import { FONT_FAMILY_OPTIONS, FONT_SIZE_OPTIONS } from '../lib/webUiFontSettings';
-import type { CredentialProviderDto, CredentialProviderUpdate, WebSettings } from '../types/api';
+import type { CredentialProviderDto, CredentialProviderModelDto, CredentialProviderUpdate, WebSettings } from '../types/api';
 import './SettingsPage.css';
+
+const DEFAULT_CONTEXT_WINDOW = 128000;
+
+interface EditableModel {
+  id: string;
+  contextWindow: string;
+}
 
 interface SettingsPageProps {
   embedded?: boolean;
@@ -19,7 +26,8 @@ interface EditableProvider {
   id: string;
   name: string;
   apiBaseUrl: string;
-  modelsText: string;
+  models: EditableModel[];
+  apiType: 'CLAUDE_CODE' | 'OPENAI';
   apiKeyInput: string;
   showApiKeyInput: boolean;
   apiKeyMasked: string | null;
@@ -33,7 +41,11 @@ function toEditableProviders(providers: CredentialProviderDto[] | undefined): Ed
     id: provider.id,
     name: provider.name,
     apiBaseUrl: provider.apiBaseUrl ?? '',
-    modelsText: (provider.models ?? []).join(', '),
+    models: (provider.models ?? []).map((model) => ({
+      id: model.id,
+      contextWindow: String(normalizeContextWindow(model.contextWindow)),
+    })),
+    apiType: provider.apiType ?? 'CLAUDE_CODE',
     apiKeyInput: '',
     showApiKeyInput: false,
     apiKeyMasked: provider.apiKeyMasked,
@@ -41,11 +53,26 @@ function toEditableProviders(providers: CredentialProviderDto[] | undefined): Ed
   }));
 }
 
-function parseModels(modelsText: string): string[] {
-  return modelsText
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
+function normalizeContextWindow(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.trunc(value);
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_CONTEXT_WINDOW;
+}
+
+function toModelPayload(models: EditableModel[]): CredentialProviderModelDto[] {
+  return models
+    .map((model) => ({
+      id: model.id.trim(),
+      contextWindow: normalizeContextWindow(model.contextWindow),
+    }))
+    .filter((model) => model.id.length > 0);
 }
 
 const tabMeta: Array<{ id: SettingsTab; label: string; eyebrow: string; description: string }> = [
@@ -188,7 +215,8 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
           id: nextId,
           name: `Provider ${current.length + 1}`,
           apiBaseUrl: '',
-          modelsText: '',
+          models: [],
+          apiType: 'CLAUDE_CODE' as const,
           apiKeyInput: '',
           showApiKeyInput: false,
           apiKeyMasked: null,
@@ -212,6 +240,33 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
     });
   };
 
+  const handleAddModel = (providerId: string) => {
+    setProviders((current) => current.map((provider) => (
+      provider.id === providerId
+        ? { ...provider, models: [...provider.models, { id: '', contextWindow: String(DEFAULT_CONTEXT_WINDOW) }] }
+        : provider
+    )));
+  };
+
+  const handleModelChange = (providerId: string, modelIndex: number, updates: Partial<EditableModel>) => {
+    setProviders((current) => current.map((provider) => (
+      provider.id === providerId
+        ? {
+            ...provider,
+            models: provider.models.map((model, index) => (index === modelIndex ? { ...model, ...updates } : model)),
+          }
+        : provider
+    )));
+  };
+
+  const handleRemoveModel = (providerId: string, modelIndex: number) => {
+    setProviders((current) => current.map((provider) => (
+      provider.id === providerId
+        ? { ...provider, models: provider.models.filter((_, index) => index !== modelIndex) }
+        : provider
+    )));
+  };
+
   const handleCredsSave = async (event: FormEvent) => {
     event.preventDefault();
     const payloadProviders: CredentialProviderUpdate[] = providers.map((provider) => {
@@ -219,7 +274,8 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
         id: provider.id,
         name: provider.name.trim() || provider.id,
         apiBaseUrl: provider.apiBaseUrl.trim() || null,
-        models: parseModels(provider.modelsText),
+        models: toModelPayload(provider.models),
+        apiType: provider.apiType,
       };
       if (provider.apiKeyInput.trim()) {
         nextProvider.apiKey = provider.apiKeyInput.trim();
@@ -608,6 +664,22 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
 
                       <div className="settings-grid">
                         <div className="settings-field">
+                          <label className="settings-label" htmlFor={`provider-api-type-${provider.id}`}>
+                            API Type
+                          </label>
+                          <select
+                            id={`provider-api-type-${provider.id}`}
+                            className="input-field settings-input settings-select"
+                            value={provider.apiType}
+                            onChange={(event) => handleProviderChange(provider.id, { apiType: event.target.value as EditableProvider['apiType'] })}
+                            data-testid={`provider-api-type-input-${provider.id}`}
+                          >
+                            <option value="CLAUDE_CODE">Claude Code</option>
+                            <option value="OPENAI">OpenAI Compatible</option>
+                          </select>
+                        </div>
+
+                        <div className="settings-field">
                           <label className="settings-label" htmlFor={`provider-base-url-${provider.id}`}>
                             API Base URL
                           </label>
@@ -620,18 +692,53 @@ export default function SettingsPage({ embedded = false, activeTab, onTabChange,
                           />
                         </div>
 
-                        <div className="settings-field">
-                          <label className="settings-label" htmlFor={`provider-models-${provider.id}`}>
-                            Models
-                          </label>
-                          <input
-                            id={`provider-models-${provider.id}`}
-                            className="input-field settings-input"
-                            value={provider.modelsText}
-                            onChange={(event) => handleProviderChange(provider.id, { modelsText: event.target.value })}
-                            placeholder="Comma-separated models"
-                            data-testid={`provider-models-input-${provider.id}`}
-                          />
+                        <div className="settings-field settings-provider-models">
+                          <div className="settings-card-header settings-card-header-inline">
+                            <label className="settings-label">Models</label>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => handleAddModel(provider.id)}
+                              data-testid={`add-provider-model-btn-${provider.id}`}
+                            >
+                              Add Model
+                            </button>
+                          </div>
+
+                          <div className="settings-provider-model-list">
+                            {provider.models.map((modelEntry, modelIndex) => (
+                              <div
+                                key={`${provider.id}-model-${modelIndex}`}
+                                className="settings-provider-model-row"
+                                data-testid={`provider-model-row-${provider.id}-${modelIndex}`}
+                              >
+                                <input
+                                  className="input-field settings-input"
+                                  value={modelEntry.id}
+                                  onChange={(event) => handleModelChange(provider.id, modelIndex, { id: event.target.value })}
+                                  placeholder="Model ID"
+                                  data-testid={`provider-model-id-input-${provider.id}-${modelIndex}`}
+                                />
+                                <input
+                                  className="input-field settings-input"
+                                  type="number"
+                                  min="1"
+                                  value={modelEntry.contextWindow}
+                                  onChange={(event) => handleModelChange(provider.id, modelIndex, { contextWindow: event.target.value })}
+                                  placeholder="Context window"
+                                  data-testid={`provider-model-context-window-input-${provider.id}-${modelIndex}`}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => handleRemoveModel(provider.id, modelIndex)}
+                                  data-testid={`remove-provider-model-btn-${provider.id}-${modelIndex}`}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </section>

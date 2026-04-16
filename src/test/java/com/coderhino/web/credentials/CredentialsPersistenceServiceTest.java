@@ -14,6 +14,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CredentialsPersistenceServiceTest {
 
+    private static ApiCredentials.ApiProvider.ModelConfig model(String id) {
+        return new ApiCredentials.ApiProvider.ModelConfig(id, 128000L);
+    }
+
+    private static ApiCredentials.ApiProvider.ModelConfig model(String id, long contextWindow) {
+        return new ApiCredentials.ApiProvider.ModelConfig(id, contextWindow);
+    }
+
     @Test
     void loadMigratesLegacySingleProviderShape(@TempDir Path tempDir) throws Exception {
         var file = tempDir.resolve("api-credentials.json");
@@ -36,7 +44,8 @@ class CredentialsPersistenceServiceTest {
         assertEquals("Migrated Provider", provider.getName());
         assertEquals("legacy-secret", provider.getApiKey());
         assertEquals("https://api.legacy.example/v1", provider.getApiBaseUrl());
-        assertEquals(List.of("legacy-model"), provider.getModels());
+        assertEquals(List.of("legacy-model"), provider.getModelIds());
+        assertEquals(128000L, provider.getModels().get(0).getContextWindow());
     }
 
     @Test
@@ -51,7 +60,7 @@ class CredentialsPersistenceServiceTest {
                 "Anthropic",
                 "secret-1234",
                 "https://api.anthropic.com",
-                List.of("MiniMax-M2.5", "GPT-5.4")
+                List.of(model("MiniMax-M2.5"), model("GPT-5.4", 256000L))
             )
         ));
 
@@ -64,7 +73,8 @@ class CredentialsPersistenceServiceTest {
         assertFalse(raw.contains("\"apiKey\" : \"\""));
 
         var reloaded = service.load();
-        assertEquals(List.of("MiniMax-M2.5", "GPT-5.4"), reloaded.getProviders().get(0).getModels());
+        assertEquals(List.of("MiniMax-M2.5", "GPT-5.4"), reloaded.getProviders().get(0).getModelIds());
+        assertEquals(256000L, reloaded.getProviders().get(0).getModels().get(1).getContextWindow());
     }
 
     @Test

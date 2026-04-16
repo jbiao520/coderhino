@@ -172,6 +172,7 @@ public class RunService {
         }
 
         sessionsWithPendingApproval.remove(session.getSessionId());
+        runExecutionService.cancelRun(runId);
         var sequence = session.recordReplayCancelled(runId);
         session.setCurrentRunStatus(RunDto.RunStatus.CANCELLED);
         session.getActiveRun().set(false);
@@ -192,6 +193,9 @@ public class RunService {
         }
         if (request == null || request.getToolUseId() == null || request.getToolUseId().isBlank()) {
             throw new IllegalArgumentException("toolUseId is required");
+        }
+        if (session.getCurrentRunStatus() == RunDto.RunStatus.CANCELLED) {
+            throw new IllegalStateException("Run has already been cancelled");
         }
         var answer = request.getAnswer() == null ? "" : request.getAnswer();
         var answered = runExecutionService.answerPendingQuestion(runId, request.getToolUseId(), answer);

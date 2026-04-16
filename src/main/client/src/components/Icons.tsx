@@ -243,6 +243,14 @@ export function SendIcon(props: IconProps) {
   );
 }
 
+export function StopIcon(props: IconProps) {
+  return (
+    <BaseIcon {...props}>
+      <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" />
+    </BaseIcon>
+  );
+}
+
 export function ChevronDownIcon(props: IconProps) {
   return (
     <BaseIcon {...props}>

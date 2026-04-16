@@ -43,6 +43,10 @@ public final class SessionStore {
     }
 
     public void appendCompletedTurnActivity(AppState state, SessionRuntime.CompletedTurnActivity activity) {
+        var runtime = state.sessionRuntime();
+        if (runtime.completedTurnActivities().stream().anyMatch(existing -> existing.assistantMessageId().equals(activity.assistantMessageId()))) {
+            return;
+        }
         appendRecord(state, completedTurnActivityRecord(state, activity));
     }
 

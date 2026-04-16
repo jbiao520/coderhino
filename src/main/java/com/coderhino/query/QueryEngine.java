@@ -43,7 +43,9 @@ public final class QueryEngine {
             new ObjectMapper(),
             config.getBaseUrl(),
             config.getApiKey(),
-            config.getModel()
+            config.getModel(),
+            config.getApiType(),
+            config.getContextWindow()
         );
     }
 
@@ -172,6 +174,7 @@ public final class QueryEngine {
         var state = bootstrapState.get();
         var sessionId = QueryLogFormatter.sessionId(state);
         var cwd = QueryLogFormatter.cwd(state);
+        var currentTurn = new ConversationHistory.CurrentTurn(visibleUserInput, userInput);
         log.info(
             "Query execution started for session {} cwd={} messageCount={} userInput={}",
             sessionId,
@@ -183,7 +186,7 @@ public final class QueryEngine {
         try {
             bootstrapState.update(current -> current.withCurrentUsage(null));
             ensureLatestUserMessage(bootstrapState, visibleUserInput);
-            var history = buildHistory(bootstrapState, userInput);
+            var history = buildHistory(bootstrapState, currentTurn);
             var contextSnapshot = contextCollector.collect(Path.of(bootstrapState.get().cwd()));
             var assembled = promptAssembler.assemble(contextSnapshot, customSystemPrompt, appendSystemPrompt);
             var request = new QueryRequest(List.copyOf(history), assembled.systemPrompt(), customSystemPrompt, appendSystemPrompt, toolLoopOrchestrator.toolSchemas());
@@ -212,7 +215,7 @@ public final class QueryEngine {
         }
     }
 
-    ArrayList<Message> buildHistory(BootstrapState bootstrapState, String userInput) {
-        return conversationHistory.build(bootstrapState, userInput);
+    ArrayList<Message> buildHistory(BootstrapState bootstrapState, ConversationHistory.CurrentTurn currentTurn) {
+        return conversationHistory.build(bootstrapState, currentTurn);
     }
 }

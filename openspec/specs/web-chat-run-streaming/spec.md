@@ -1,5 +1,6 @@
-## ADDED Requirements
-
+## Purpose
+Define how web chat runs stream live output, persist completion state, and render inline progress and tool activity.
+## Requirements
 ### Requirement: Web chat run submission shall start a streamable run
 The system SHALL accept a chat submission for an existing web session, create a run for that session, and expose that run to the web UI as the active run for subsequent streaming events.
 
@@ -31,7 +32,7 @@ The system SHALL publish SSE events for the active web session using a stable pa
 - **THEN** the SSE stream SHALL emit typed progress events whose payload identifies the run and preserves the arrival order of that intermediate content
 
 ### Requirement: Web chat UI shall render live assistant output for the active run
-The system SHALL append streamed assistant text for the currently active run into the chat view while execution is in progress, and SHALL render streamed tool activity and richer model-progress activity inline within that same conversation flow in the exact chronological order events are processed. The UI SHALL NOT place active-run tool activity or model-progress activity in a separate bottom panel.
+The system SHALL append streamed assistant text for the currently active run into the chat view while execution is in progress, and SHALL render streamed tool activity and richer model-progress activity inline within that same conversation flow in the exact chronological order events are processed. The UI SHALL NOT place active-run tool activity or model-progress activity in a separate bottom panel. The UI SHALL allow users to independently hide model thinking items and tool-execution items without changing the ordering of the remaining visible transcript items.
 
 #### Scenario: Browser receives streaming text chunk
 - **WHEN** the browser receives a `text-chunk` event for the active run
@@ -45,8 +46,16 @@ The system SHALL append streamed assistant text for the currently active run int
 - **WHEN** the browser receives a typed model-progress event for the active run
 - **THEN** the chat view SHALL render that progress inline in chronological order without converting it into a finalized assistant message
 
+#### Scenario: User hides model thinking details
+- **WHEN** the user turns off the model thinking visibility control during a live or replayed run
+- **THEN** the chat view SHALL hide `thinking` transcript items while continuing to show other visible transcript items in their original relative order
+
+#### Scenario: User hides tool executions
+- **WHEN** the user turns off the tool execution visibility control during a live or replayed run
+- **THEN** the chat view SHALL hide tool-input progress items and finalized inline tool activity blocks while continuing to show other visible transcript items in their original relative order
+
 ### Requirement: Inline tool activity blocks shall be compact and collapsible
-The system SHALL render each streamed tool call as a visually distinct inline block inside the main chat transcript. Each block SHALL display the tool name, a status icon indicating pending or completed execution, and a toggle control for expansion. Inline tool activity blocks SHALL be collapsed by default and SHALL reveal the tool input and output when expanded.
+The system SHALL render each streamed tool call as a visually distinct inline block inside the main chat transcript. Each block SHALL display the tool name, a status icon indicating pending or completed execution, and a toggle control for expansion. Inline tool activity blocks SHALL be collapsed by default and SHALL reveal the tool input and output when expanded. The collapsed presentation SHALL use a compact summary layout so multiple tool executions can be scanned quickly during a run.
 
 #### Scenario: Tool activity appears collapsed by default
 - **WHEN** the browser receives a `tool-call` event for the active run
@@ -55,6 +64,10 @@ The system SHALL render each streamed tool call as a visually distinct inline bl
 #### Scenario: User expands an inline tool block
 - **WHEN** the user expands a completed inline tool activity block
 - **THEN** the chat view SHALL show the full serialized tool input and output for that tool call within the transcript without navigating away from the conversation
+
+#### Scenario: Compact tool activity summary remains scannable
+- **WHEN** multiple tool activity blocks are shown in the active transcript
+- **THEN** each collapsed block SHALL present a denser summary row that remains visually distinct from assistant text while minimizing vertical space usage
 
 ### Requirement: Persisted web chat messages shall include hover-action metadata
 The system SHALL include timestamp metadata for persisted messages and stable rollback target metadata for persisted user messages in session payloads.
@@ -98,7 +111,7 @@ The system SHALL finalize a completed web run by persisting the assistant respon
 - **THEN** the event payload delivered to the browser SHALL include `runId`, `sessionId`, and `projectId`
 
 ### Requirement: Web chat run terminal states shall be reflected in browser state
-The system SHALL update browser-visible run state for completion, cancellation, and failure so the chat composer and status indicators accurately reflect whether the user can submit another request. Completion handling SHALL also make enough metadata available for the browser to treat off-screen AI run completions as project-scoped unseen notifications.
+The system SHALL update browser-visible run state for completion, cancellation, failure, and transient retrying so the chat composer and status indicators accurately reflect whether the user can submit another request and whether the active run is still progressing. Completion handling SHALL also make enough metadata available for the browser to treat off-screen AI run completions as project-scoped unseen notifications. When a run is retrying after a transient failure such as a 429 rate limit, the browser SHALL present an explicit retrying indicator instead of appearing idle or silently stopped.
 
 #### Scenario: Completed run clears active run state
 - **WHEN** the browser receives the completion event for the active run
@@ -115,6 +128,14 @@ The system SHALL update browser-visible run state for completion, cancellation, 
 #### Scenario: Failed run surfaces error
 - **WHEN** the browser receives a failure event for the active run
 - **THEN** the UI SHALL clear the active run state, preserve any useful diagnostic context, and display that the run failed instead of appearing idle without explanation
+
+#### Scenario: Active run shows explicit retrying state after rate limit
+- **WHEN** the browser receives a retry status event for the active run indicating a transient retry such as a 429 rate limit
+- **THEN** the UI SHALL show an explicit retrying indicator that the run is still active and attempting again
+
+#### Scenario: Retrying indicator clears when progress resumes
+- **WHEN** the active run receives new assistant output, tool progress, completion, failure, or cancellation after a retry status
+- **THEN** the UI SHALL clear the explicit retrying indicator for that run so stale retry state is not shown
 
 ### Requirement: Successful web chat submissions SHALL be available to composer history navigation
 The system SHALL add each successfully submitted web chat composer prompt to the browser-side composer history for the active page so that later keyboard history navigation can reuse that submitted prompt.
@@ -160,3 +181,23 @@ The system SHALL preserve a display-ready user prompt for slash command runs so 
 #### Scenario: Refreshed session does not duplicate visible slash command messages
 - **WHEN** the browser refreshes session state after a slash command run completes
 - **THEN** the chat timeline SHALL reconcile the optimistic user message with the persisted visible command prompt without showing duplicates
+
+### Requirement: Inline model-progress blocks shall use compact summaries
+The system SHALL render inline model-progress items, including thinking, retry status, and tool-input preparation, using compact summary-first blocks that communicate the current state without consuming the same vertical space as a full assistant message. Retry-related status items SHALL remain visible in chronological transcript order even when the same retry state is also surfaced in a more prominent active-run indicator.
+
+#### Scenario: Thinking progress renders as compact summary
+- **WHEN** the browser receives one or more `thinking` transcript items for the active run and model thinking visibility is enabled
+- **THEN** the chat view SHALL render those items with a compact summary treatment that remains visually distinct from assistant reply content
+
+#### Scenario: Tool-input progress renders as compact summary
+- **WHEN** the browser receives a tool-input progress item and tool execution visibility is enabled
+- **THEN** the chat view SHALL render that item with a compact summary treatment that communicates which tool is being prepared while keeping the transcript dense
+
+#### Scenario: Retry status renders as compact summary
+- **WHEN** the browser receives a status progress item for the active run
+- **THEN** the chat view SHALL render that item with compact inline styling that keeps the status visible without dominating the message list
+
+#### Scenario: Retry status is also surfaced explicitly while active
+- **WHEN** the browser receives the latest retry status item for a still-active run
+- **THEN** the UI SHALL preserve the inline transcript item and SHALL also expose that retry state in a prominent active-run indicator so the user can tell the agent has not stopped
+

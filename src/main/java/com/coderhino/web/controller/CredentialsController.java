@@ -53,6 +53,7 @@ public class CredentialsController {
             merged.setName(update.getName());
             merged.setApiBaseUrl(update.getApiBaseUrl());
             merged.setModels(update.getModels());
+            merged.setApiType(update.getApiType());
             if (update.getApiKey() != null) {
                 merged.setApiKey(update.getApiKey());
             } else if (existing != null) {
@@ -69,12 +70,16 @@ public class CredentialsController {
             .map(provider -> {
                 var apiKey = provider.getApiKey();
                 var hasApiKey = apiKey != null && !apiKey.isEmpty();
+                var models = provider.getModels().stream()
+                    .map(model -> new CredentialsDto.ProviderDto.ModelDto(model.getId(), model.getContextWindow()))
+                    .toList();
                 return new CredentialsDto.ProviderDto(
                     provider.getId(),
                     provider.getName(),
                     persistenceService.maskApiKey(apiKey),
                     provider.getApiBaseUrl(),
-                    provider.getModels(),
+                    models,
+                    provider.getApiType(),
                     hasApiKey
                 );
             })

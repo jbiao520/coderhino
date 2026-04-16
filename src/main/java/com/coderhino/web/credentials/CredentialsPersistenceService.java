@@ -90,22 +90,26 @@ public class CredentialsPersistenceService {
     }
 
     private ApiCredentials.ApiProvider createLegacyProvider(ApiCredentials credentials) {
-        var models = new ArrayList<String>();
+        var models = new ArrayList<ApiCredentials.ApiProvider.ModelConfig>();
         if (isNotBlank(credentials.getLegacyModel())) {
-            models.add(credentials.getLegacyModel().trim());
+            models.add(new ApiCredentials.ApiProvider.ModelConfig(
+                credentials.getLegacyModel().trim(),
+                ApiCredentials.ApiProvider.DEFAULT_CONTEXT_WINDOW
+            ));
         }
         return new ApiCredentials.ApiProvider(
             "provider-legacy",
             "Migrated Provider",
             credentials.getLegacyApiKey(),
             credentials.getLegacyApiBaseUrl(),
-            models
+            models,
+            ApiCredentials.ApiProvider.API_TYPE_CLAUDE_CODE
         );
     }
 
     private ApiCredentials.ApiProvider normalizeProvider(ApiCredentials.ApiProvider provider, int index) {
         var name = isNotBlank(provider.getName()) ? provider.getName().trim() : "Provider " + index;
-        var models = provider.getModels() == null ? List.<String>of() : provider.getModels();
+        var models = provider.getModels() == null ? List.<ApiCredentials.ApiProvider.ModelConfig>of() : provider.getModels();
         if (!isNotBlank(provider.getId()) && !isNotBlank(name) && !isNotBlank(provider.getApiBaseUrl())
             && !isNotBlank(provider.getApiKey()) && models.isEmpty()) {
             return null;
@@ -115,7 +119,8 @@ public class CredentialsPersistenceService {
             name,
             provider.getApiKey(),
             provider.getApiBaseUrl(),
-            models
+            models,
+            provider.getApiType()
         );
     }
 

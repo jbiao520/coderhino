@@ -71,6 +71,7 @@ export interface UsageMetrics {
 }
 
 export interface PendingQuestion {
+  runId?: string;
   toolUseId: string;
   question: string;
   choices: string[];
@@ -80,7 +81,9 @@ export interface StreamingState {
   session: SessionDto | null;
   messages: StreamingMessage[];
   runTranscript: RunTranscriptItem[];
+  activeRetryStatus: string | null;
   activeRun: RunDto | null;
+  cancelingRun: boolean;
   runStatus: 'idle' | 'running' | 'completed' | 'error';
   error: string | null;
   loading: boolean;
@@ -97,6 +100,7 @@ type Action =
   | { type: 'SESSION_REFRESHED'; session: SessionDto }
   | { type: 'SESSION_ERROR'; error: string }
   | { type: 'RUN_STARTED'; runId: string }
+  | { type: 'RUN_CANCELLING' }
   | { type: 'TEXT_CHUNK'; runId?: string; text: string; sequence?: number }
   | { type: 'STATUS'; runId?: string; message: string; sequence?: number }
   | { type: 'THINKING_DELTA'; runId?: string; thinking: string; sequence?: number }
@@ -114,11 +118,14 @@ type Action =
   | { type: 'USAGE_UPDATE'; usage: UsageMetrics }
   | { type: 'PENDING_QUESTION_UPDATED'; pendingQuestion: PendingQuestion | null };
 
+const RETRY_STATUS_PREFIX = 'Retrying LLM request: ';
+
 function mapPendingQuestion(value: PendingQuestionDto | null | undefined): PendingQuestion | null {
   if (!value?.toolUseId || !value.question) {
     return null;
   }
   return {
+    runId: typeof value.runId === 'string' && value.runId.trim().length > 0 ? value.runId : undefined,
     toolUseId: value.toolUseId,
     question: value.question,
     choices: Array.isArray(value.choices) ? value.choices : [],
@@ -200,6 +207,24 @@ function appendStatusText(items: RunTranscriptItem[], message: string): RunTrans
     return items;
   }
   return [...items, { kind: 'status', content: message }];
+}
+
+function isRetryStatusMessage(message: string): boolean {
+  return message.startsWith(RETRY_STATUS_PREFIX);
+}
+
+function deriveActiveRetryStatus(items: RunTranscriptItem[]): string | null {
+  let activeRetryStatus: string | null = null;
+  for (const item of items) {
+    if (item.kind === 'status') {
+      if (isRetryStatusMessage(item.content)) {
+        activeRetryStatus = item.content;
+      }
+      continue;
+    }
+    activeRetryStatus = null;
+  }
+  return activeRetryStatus;
 }
 
 function appendToolInputDelta(items: RunTranscriptItem[], toolName: string, toolUseId: string | undefined, partialJson: string): RunTranscriptItem[] {
@@ -323,6 +348,8 @@ function mapReplayFileSummary(replayState: ActiveRunStateDto | null | undefined)
 function applySessionSnapshot(base: StreamingState, session: SessionDto, loading: boolean): StreamingState {
   const replayState = session.activeRunState ?? null;
   const runId = replayState?.runId ?? session.activeRun?.runId;
+  const pendingQuestion = mapPendingQuestion(replayState?.pendingQuestion)
+    ?? null;
   const nextSequences = { ...base.lastEventSequenceByRun };
   if (runId && replayState?.lastSequence != null) {
     nextSequences[runId] = replayState.lastSequence;
@@ -332,7 +359,9 @@ function applySessionSnapshot(base: StreamingState, session: SessionDto, loading
     session,
     messages: mapSessionMessages(session.messages),
     activeRun: session.activeRun,
+    cancelingRun: false,
     runTranscript: mapReplayTranscript(replayState?.transcript),
+    activeRetryStatus: session.activeRun ? deriveActiveRetryStatus(mapReplayTranscript(replayState?.transcript)) : null,
     runStatus:
       replayState?.terminalStatus === 'FAILED'
         ? 'error'
@@ -345,7 +374,12 @@ function applySessionSnapshot(base: StreamingState, session: SessionDto, loading
     error: replayState?.terminalStatus === 'FAILED' ? replayState.error ?? 'Run failed' : null,
     fileSummary: mapReplayFileSummary(replayState),
     usage: mapReplayUsage(replayState),
-    pendingQuestion: mapPendingQuestion(replayState?.pendingQuestion),
+    pendingQuestion: pendingQuestion == null
+      ? null
+      : {
+        ...pendingQuestion,
+        runId: pendingQuestion.runId ?? runId,
+      },
     lastEventSequenceByRun: nextSequences,
   };
 }
@@ -361,10 +395,16 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
     case 'SESSION_ERROR':
       return { ...state, loading: false, error: action.error };
 
+    case 'RUN_CANCELLING':
+      return state.activeRun
+        ? { ...state, cancelingRun: true }
+        : state;
+
     case 'ROLLBACK_COMPLETED':
       return {
         ...applySessionSnapshot(state, action.session, state.loading),
         runTranscript: [],
+        activeRetryStatus: null,
         runStatus: action.session.activeRun ? 'running' : 'idle',
         error: null,
         fileSummary: null,
@@ -380,8 +420,10 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       return {
         ...state,
         activeRun: { runId: action.runId, status: 'RUNNING' },
+        cancelingRun: false,
         runStatus: 'running',
         runTranscript: [],
+        activeRetryStatus: null,
         chunkCount: 0,
         error: null,
         usage: null,
@@ -396,6 +438,7 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       return {
         ...state,
         runTranscript: appendTranscriptText(state.runTranscript, action.text),
+        activeRetryStatus: null,
         chunkCount: state.chunkCount + 1,
         lastEventSequenceByRun: markSequence(state, action.runId, action.sequence),
       };
@@ -407,6 +450,7 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       return {
         ...state,
         runTranscript: appendStatusText(state.runTranscript, action.message),
+        activeRetryStatus: isRetryStatusMessage(action.message) ? action.message : state.activeRetryStatus,
         lastEventSequenceByRun: markSequence(state, action.runId, action.sequence),
       };
 
@@ -417,6 +461,7 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       return {
         ...state,
         runTranscript: appendThinkingText(state.runTranscript, action.thinking),
+        activeRetryStatus: null,
         lastEventSequenceByRun: markSequence(state, action.runId, action.sequence),
       };
 
@@ -427,6 +472,7 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       return {
         ...state,
         runTranscript: appendToolInputDelta(state.runTranscript, action.toolName, action.toolUseId, action.partialJson),
+        activeRetryStatus: null,
         lastEventSequenceByRun: markSequence(state, action.runId, action.sequence),
       };
 
@@ -440,6 +486,7 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
           ...state.runTranscript,
           { kind: 'tool', toolName: action.toolName, toolUseId: action.toolUseId, input: action.input },
         ],
+        activeRetryStatus: null,
         lastEventSequenceByRun: markSequence(state, action.runId, action.sequence),
       };
 
@@ -455,6 +502,7 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       if (toolIndex < 0) {
         return {
           ...state,
+          activeRetryStatus: null,
           lastEventSequenceByRun: markSequence(state, action.runId, action.sequence),
         };
       }
@@ -465,6 +513,7 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
             ? { ...item, output: action.output }
             : item,
         ),
+        activeRetryStatus: null,
         lastEventSequenceByRun: markSequence(state, action.runId, action.sequence),
       };
     }
@@ -489,7 +538,9 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
         ...state,
         messages: newMessages,
         runTranscript,
+        activeRetryStatus: null,
         activeRun: null,
+        cancelingRun: false,
         runStatus: 'completed',
         chunkCount: 0,
         error: null,
@@ -507,7 +558,9 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       return {
         ...state,
         runTranscript: [],
+        activeRetryStatus: null,
         activeRun: null,
+        cancelingRun: false,
         runStatus: 'idle',
         chunkCount: 0,
         error: null,
@@ -527,7 +580,9 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       return {
         ...state,
         runTranscript: [],
+        activeRetryStatus: null,
         activeRun: null,
+        cancelingRun: false,
         runStatus: 'error',
         chunkCount: 0,
         error: action.error,
@@ -544,6 +599,7 @@ export function reducer(state: StreamingState, action: Action): StreamingState {
       return {
         ...state,
         messages: [...state.messages, { role: 'user', content: action.content }],
+        activeRetryStatus: null,
         completedRunIds: new Set<string>(),
         lastEventSequenceByRun: {},
       };
@@ -582,7 +638,9 @@ const INITIAL_STATE: StreamingState = {
   session: null,
   messages: [],
   runTranscript: [],
+  activeRetryStatus: null,
   activeRun: null,
+  cancelingRun: false,
   runStatus: 'idle',
   error: null,
   loading: true,
@@ -707,7 +765,7 @@ export function useStreamingSession(sessionId: string | undefined): UseStreaming
           }
           case 'status': {
             const message = typeof parsed['status'] === 'string' ? parsed['status'] : '';
-            if (message.startsWith('Retrying LLM request: ')) {
+            if (isRetryStatusMessage(message)) {
               dispatch({
                 type: 'STATUS',
                 runId: typeof parsed['runId'] === 'string' ? parsed['runId'] : undefined,
@@ -808,9 +866,11 @@ export function useStreamingSession(sessionId: string | undefined): UseStreaming
             break;
           }
           case 'ask-user-question': {
+            const runId = typeof parsed['runId'] === 'string' ? parsed['runId'] : undefined;
             dispatch({
               type: 'PENDING_QUESTION_UPDATED',
               pendingQuestion: mapPendingQuestion({
+                runId,
                 toolUseId: typeof parsed['toolUseId'] === 'string' ? parsed['toolUseId'] : '',
                 question: typeof parsed['question'] === 'string' ? parsed['question'] : '',
                 choices: Array.isArray(parsed['choices']) ? parsed['choices'] as string[] : [],
@@ -888,26 +948,35 @@ export function useStreamingSession(sessionId: string | undefined): UseStreaming
   );
 
   const cancelRun = useCallback(async () => {
-    if (!sessionId || !state.activeRun) return;
+    if (!sessionId || !state.activeRun || state.cancelingRun) return;
     const runId = state.activeRun.runId;
+    dispatch({ type: 'RUN_CANCELLING' });
     const res = await fetch(`/api/sessions/${sessionId}/runs/${runId}`, {
       method: 'DELETE',
     });
     if (res.ok) {
       dispatch({ type: 'RUN_CANCELLED' });
-    }
-  }, [sessionId, state.activeRun]);
-
-  const answerPendingQuestion = useCallback(async (toolUseId: string, answer: string) => {
-    if (!sessionId || !state.activeRun) {
       return;
     }
-    await api.sessions.answerPendingQuestion(sessionId, state.activeRun.runId, {
+    await refreshSession();
+  }, [refreshSession, sessionId, state.activeRun, state.cancelingRun]);
+
+  const answerPendingQuestion = useCallback(async (toolUseId: string, answer: string) => {
+    if (!sessionId) {
+      return;
+    }
+    const runId = state.pendingQuestion?.toolUseId === toolUseId
+      ? state.pendingQuestion.runId ?? state.activeRun?.runId ?? state.session?.activeRunState?.runId
+      : state.activeRun?.runId ?? state.session?.activeRunState?.runId;
+    if (!runId) {
+      return;
+    }
+    await api.sessions.answerPendingQuestion(sessionId, runId, {
       toolUseId,
       answer,
     });
     dispatch({ type: 'PENDING_QUESTION_UPDATED', pendingQuestion: null });
-  }, [sessionId, state.activeRun]);
+  }, [sessionId, state.activeRun, state.pendingQuestion, state.session?.activeRunState?.runId]);
 
   const appendMessage = useCallback((role: 'user' | 'system', content: string) => {
     if (!content) {

@@ -36,6 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class SessionControllerTest {
 
+    private static ApiCredentials.ApiProvider.ModelConfig model(String id) {
+        return new ApiCredentials.ApiProvider.ModelConfig(id, 128000L);
+    }
+
     private static SessionStore createSessionStore(Path root) {
         return new SessionStore(new ObjectMapper().registerModule(new JavaTimeModule()), root);
     }
@@ -486,8 +490,8 @@ class SessionControllerTest {
         var credentials = new ApiCredentials();
         credentials.setDefaultProviderId("provider-2");
         credentials.setProviders(java.util.List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of("MiniMax-M2.5")),
-            new ApiCredentials.ApiProvider("provider-2", "OpenAI", "secret-2", "https://api.openai.com/v1", java.util.List.of("gpt-4o", "gpt-4.1"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of(model("MiniMax-M2.5"))),
+            new ApiCredentials.ApiProvider("provider-2", "OpenAI", "secret-2", "https://api.openai.com/v1", java.util.List.of(model("gpt-4o"), model("gpt-4.1")))
         ));
         credentialsService.save(credentials);
 
@@ -522,7 +526,7 @@ class SessionControllerTest {
         var credentials = new ApiCredentials();
         credentials.setDefaultProviderId("provider-1");
         credentials.setProviders(java.util.List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of("MiniMax-M2.1"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of(model("MiniMax-M2.1")))
         ));
         credentialsService.save(credentials);
 
@@ -555,7 +559,7 @@ class SessionControllerTest {
         var credentials = new ApiCredentials();
         credentials.setDefaultProviderId("provider-1");
         credentials.setProviders(java.util.List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of("MiniMax-M2.1"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of(model("MiniMax-M2.1")))
         ));
         credentialsService.save(credentials);
 
@@ -605,7 +609,7 @@ class SessionControllerTest {
         var credentials = new ApiCredentials();
         credentials.setDefaultProviderId("provider-1");
         credentials.setProviders(java.util.List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of("MiniMax-M2.1"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of(model("MiniMax-M2.1")))
         ));
         credentialsService.save(credentials);
 
@@ -649,7 +653,7 @@ class SessionControllerTest {
         var credentials = new ApiCredentials();
         credentials.setDefaultProviderId("provider-1");
         credentials.setProviders(java.util.List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of("MiniMax-M2.5"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-1", "https://api.anthropic.com", java.util.List.of(model("MiniMax-M2.5")))
         ));
         credentialsService.save(credentials);
 

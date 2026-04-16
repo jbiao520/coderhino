@@ -99,6 +99,7 @@ class RunServiceTest {
         assertEquals(RunDto.RunStatus.CANCELLED, session.getCurrentRunStatus());
         assertNotNull(eventBus.lastEvent);
         assertEquals(SessionEvent.EventType.cancelled, eventBus.lastEvent.type());
+        assertNull(runExecutionService.lastCancelledRunId);
     }
 
     @Test
@@ -119,6 +120,7 @@ class RunServiceTest {
         assertEquals(RunDto.RunStatus.CANCELLED, session.getCurrentRunStatus());
         assertNotNull(eventBus.lastEvent);
         assertEquals(SessionEvent.EventType.cancelled, eventBus.lastEvent.type());
+        assertEquals("run-5", runExecutionService.lastCancelledRunId);
     }
 
     @Test
@@ -216,6 +218,7 @@ class RunServiceTest {
         String lastAnsweredRunId;
         String lastAnsweredToolUseId;
         String lastAnsweredValue;
+        String lastCancelledRunId;
         boolean pendingQuestionPresent;
 
         private TestRunExecutionService() {
@@ -261,6 +264,12 @@ class RunServiceTest {
             this.lastAnsweredToolUseId = toolUseId;
             this.lastAnsweredValue = answer;
             return pendingQuestionPresent;
+        }
+
+        @Override
+        public boolean cancelRun(String runId) {
+            this.lastCancelledRunId = runId;
+            return true;
         }
     }
 

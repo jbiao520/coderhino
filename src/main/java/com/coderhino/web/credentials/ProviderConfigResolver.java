@@ -1,5 +1,6 @@
 package com.coderhino.web.credentials;
 
+import com.coderhino.query.ProviderApiType;
 import com.coderhino.web.settings.SettingsPersistenceService;
 
 /**
@@ -8,7 +9,8 @@ import com.coderhino.web.settings.SettingsPersistenceService;
 public class ProviderConfigResolver {
 
     private static final String DEFAULT_MODEL = "MiniMax-M2.5";
-    private static final String DEFAULT_BASE_URL = "https://api.anthropic.com";
+    private static final ProviderApiType DEFAULT_API_TYPE = ProviderApiType.CLAUDE_CODE;
+    private static final long DEFAULT_CONTEXT_WINDOW = 128000L;
 
     private final CredentialsPersistenceService credentialsService;
     private final SettingsPersistenceService settingsService;
@@ -40,8 +42,10 @@ public class ProviderConfigResolver {
         return new ResolvedConfig(
             provider.getId(),
             provider.getApiKey(),
-            normalizeBaseUrl(provider.getApiBaseUrl()),
-            resolveModel(model, provider)
+            normalizeBaseUrl(provider.getApiBaseUrl(), ProviderApiType.fromStoredValue(provider.getApiType())),
+            resolveModel(model, provider),
+            ProviderApiType.fromStoredValue(provider.getApiType()),
+            resolveContextWindow(resolveModel(model, provider), provider)
         );
     }
 
@@ -51,7 +55,7 @@ public class ProviderConfigResolver {
         }
         var models = provider.getModels();
         if (models != null && !models.isEmpty()) {
-            return models.get(0);
+            return models.get(0).getId();
         }
         var settingsModel = settingsService.load().getDefaultModel();
         if (settingsModel != null && !settingsModel.isBlank()) {
@@ -60,9 +64,20 @@ public class ProviderConfigResolver {
         return DEFAULT_MODEL;
     }
 
-    private String normalizeBaseUrl(String rawBaseUrl) {
+    private long resolveContextWindow(String requestedModel, ApiCredentials.ApiProvider provider) {
+        if (provider == null || requestedModel == null || requestedModel.isBlank()) {
+            return DEFAULT_CONTEXT_WINDOW;
+        }
+        var model = provider.findModel(requestedModel);
+        if (model == null) {
+            return DEFAULT_CONTEXT_WINDOW;
+        }
+        return ApiCredentials.ApiProvider.ModelConfig.normalizeContextWindow(model.getContextWindow());
+    }
+
+    private String normalizeBaseUrl(String rawBaseUrl, ProviderApiType apiType) {
         if (rawBaseUrl == null || rawBaseUrl.isBlank()) {
-            return DEFAULT_BASE_URL;
+            return (apiType == null ? DEFAULT_API_TYPE : apiType).defaultBaseUrl();
         }
         var normalized = rawBaseUrl.trim();
         while (normalized.endsWith("/")) {
@@ -76,12 +91,16 @@ public class ProviderConfigResolver {
         private final String apiKey;
         private final String baseUrl;
         private final String model;
+        private final ProviderApiType apiType;
+        private final long contextWindow;
 
-        public ResolvedConfig(String providerId, String apiKey, String baseUrl, String model) {
+        public ResolvedConfig(String providerId, String apiKey, String baseUrl, String model, ProviderApiType apiType, long contextWindow) {
             this.providerId = providerId;
             this.apiKey = apiKey;
             this.baseUrl = baseUrl;
             this.model = model;
+            this.apiType = apiType;
+            this.contextWindow = contextWindow;
         }
 
         public String getProviderId() {
@@ -98,6 +117,14 @@ public class ProviderConfigResolver {
 
         public String getModel() {
             return model;
+        }
+
+        public ProviderApiType getApiType() {
+            return apiType;
+        }
+
+        public long getContextWindow() {
+            return contextWindow;
         }
     }
 }

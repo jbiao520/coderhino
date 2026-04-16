@@ -6,6 +6,18 @@ const MIN_WIDTH = 220;
 const MAX_WIDTH = 640;
 const DEFAULT_WIDTH = 320;
 
+function clampWidth(width: number): number {
+  return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width));
+}
+
+function getResizeBoundaryRight(panel: HTMLDivElement | null): number {
+  const parentRect = panel?.parentElement?.getBoundingClientRect();
+  if (parentRect && parentRect.right > parentRect.left) {
+    return parentRect.right;
+  }
+  return window.innerWidth;
+}
+
 function getStoredWidth(): number {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -14,7 +26,7 @@ function getStoredWidth(): number {
     const val = parseInt(raw ?? legacyRaw ?? '', 10);
     if (isNaN(val)) return DEFAULT_WIDTH;
     const normalized = raw ? val : Math.round(val / 2);
-    return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, normalized));
+    return clampWidth(normalized);
   } catch {
     return DEFAULT_WIDTH;
   }
@@ -29,6 +41,12 @@ interface FilePanelProps {
 export default function FilePanel({ isOpen, children, panelTestId = 'file-panel' }: FilePanelProps) {
   const [width, setWidth] = useState(getStoredWidth);
   const dragging = useRef(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const widthRef = useRef(width);
+
+  useEffect(() => {
+    widthRef.current = width;
+  }, [width]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -38,7 +56,8 @@ export default function FilePanel({ isOpen, children, panelTestId = 'file-panel'
 
     const handleMouseMove = (ev: MouseEvent) => {
       if (!dragging.current) return;
-      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, window.innerWidth - ev.clientX));
+      const boundaryRight = getResizeBoundaryRight(panelRef.current);
+      const newWidth = clampWidth(boundaryRight - ev.clientX);
       setWidth(newWidth);
     };
 
@@ -49,7 +68,7 @@ export default function FilePanel({ isOpen, children, panelTestId = 'file-panel'
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       try {
-        localStorage.setItem(STORAGE_KEY, String(width));
+        localStorage.setItem(STORAGE_KEY, String(widthRef.current));
       } catch {}
     };
 
@@ -68,7 +87,7 @@ export default function FilePanel({ isOpen, children, panelTestId = 'file-panel'
   if (!isOpen) return null;
 
   return (
-    <div style={{ ...styles.panel, width }} data-testid={panelTestId}>
+    <div ref={panelRef} style={{ ...styles.panel, width }} data-testid={panelTestId}>
       <div
         style={styles.dragHandle}
         onMouseDown={handleMouseDown}
@@ -86,6 +105,7 @@ const styles = {
     background: 'var(--surface)',
     overflow: 'hidden',
     flexShrink: 0,
+    marginLeft: 'auto',
     position: 'relative' as const,
   } as React.CSSProperties,
   dragHandle: {

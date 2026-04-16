@@ -387,6 +387,7 @@ a {
 .app-workspace {
   display: flex;
   min-height: 0;
+  min-width: 0;
   flex: 1;
   overflow: hidden;
 }
@@ -422,6 +423,7 @@ a {
 
 .app-main {
   flex: 1;
+  min-width: 0;
   overflow: auto;
 }
 

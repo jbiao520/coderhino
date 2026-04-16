@@ -20,6 +20,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 
 class QueryEngineMessageLifecycleTest {
 
@@ -76,6 +77,52 @@ class QueryEngineMessageLifecycleTest {
         assertEquals("/opsx-propose fix-refresh", messages.get(0).content());
         assertInstanceOf(Message.AssistantMessage.class, messages.get(1));
         assertEquals("Visible response", messages.get(1).content());
+    }
+
+    @Test
+    void buildHistoryUsesRawCurrentTurnWithoutDuplicatingVisibleTurn() {
+        bootstrapState.addMessage(new Message.UserMessage("earlier visible"));
+        bootstrapState.addMessage(new Message.AssistantMessage("earlier reply"));
+        bootstrapState.addMessage(new Message.UserMessage("/opsx-propose fix-refresh"));
+
+        var engine = buildEngine("Visible response");
+
+        var history = engine.buildHistory(
+            bootstrapState,
+            new ConversationHistory.CurrentTurn("/opsx-propose fix-refresh", "expanded hidden prompt")
+        );
+
+        assertEquals(3, history.size());
+        assertIterableEquals(
+            List.of("earlier visible", "earlier reply", "expanded hidden prompt"),
+            history.stream().map(Message::content).toList()
+        );
+    }
+
+    @Test
+    void executeUsesRawCurrentTurnInModelRequestWhilePersistingVisibleTurn() {
+        QueryRequest[] captured = new QueryRequest[1];
+        var modelClient = (ModelClient) (state, request) -> {
+            captured[0] = request;
+            return new ModelResponse.AssistantReply("Visible response");
+        };
+        var engine = new QueryEngine(
+            new ToolRegistry(List.of()),
+            modelClient,
+            new PermissionChecker(),
+            new ContextCollector(),
+            ServiceRegistry.createDefault()
+        );
+
+        engine.execute(bootstrapState, "expanded hidden prompt", "/opsx-propose fix-refresh", NoOpQueryEventSink.INSTANCE);
+
+        var persistedMessages = bootstrapState.get().messages();
+        assertEquals(2, persistedMessages.size());
+        assertEquals("/opsx-propose fix-refresh", persistedMessages.get(0).content());
+        assertEquals("Visible response", persistedMessages.get(1).content());
+
+        assertEquals(1, captured[0].messages().stream().filter(Message.UserMessage.class::isInstance).count());
+        assertEquals("expanded hidden prompt", captured[0].messages().get(0).content());
     }
 
     @Test

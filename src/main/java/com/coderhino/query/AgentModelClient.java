@@ -28,7 +28,7 @@ import java.util.stream.Stream;
 public final class AgentModelClient implements ModelClient {
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(360);
     private static final int MAX_ATTEMPTS = 5;
-    private static final int MAX_OUTPUT_TOKENS = 128000;
+    private static final long DEFAULT_CONTEXT_WINDOW = 128000L;
     private static final Logger log = LoggerFactory.getLogger(AgentModelClient.class);
 
     private final HttpClient httpClient;
@@ -36,8 +36,25 @@ public final class AgentModelClient implements ModelClient {
     private final String baseUrl;
     private final String apiKey;
     private final String model;
+    private final long contextWindow;
+
+    public AgentModelClient(
+        HttpClient httpClient,
+        ObjectMapper objectMapper,
+        String baseUrl,
+        String apiKey,
+        String model,
+        ProviderApiType apiType,
+        long contextWindow
+    ) {
+        this(httpClient, objectMapper, baseUrl, apiKey, model, contextWindow);
+    }
 
     public AgentModelClient(HttpClient httpClient, ObjectMapper objectMapper, String baseUrl, String apiKey, String model) {
+        this(httpClient, objectMapper, baseUrl, apiKey, model, DEFAULT_CONTEXT_WINDOW);
+    }
+
+    public AgentModelClient(HttpClient httpClient, ObjectMapper objectMapper, String baseUrl, String apiKey, String model, long contextWindow) {
         if (httpClient == null) throw new IllegalArgumentException("httpClient must not be null");
         if (objectMapper == null) throw new IllegalArgumentException("objectMapper must not be null");
         if (baseUrl == null || baseUrl.isBlank()) throw new IllegalArgumentException("baseUrl must not be null or blank");
@@ -48,6 +65,7 @@ public final class AgentModelClient implements ModelClient {
         this.baseUrl = stripTrailingSlash(baseUrl);
         this.apiKey = apiKey;
         this.model = model;
+        this.contextWindow = contextWindow > 0 ? contextWindow : DEFAULT_CONTEXT_WINDOW;
     }
 
     @Override
@@ -427,7 +445,7 @@ public final class AgentModelClient implements ModelClient {
     Map<String, Object> buildPayload(QueryRequest request, boolean stream) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("model", model);
-        payload.put("max_tokens", MAX_OUTPUT_TOKENS);
+        payload.put("max_tokens", contextWindow);
         payload.put("stream", stream);
 
         if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
@@ -603,6 +621,9 @@ public final class AgentModelClient implements ModelClient {
             return null;
         }
         var normalizedBody = errorBody == null ? "" : errorBody.toLowerCase();
+        if (statusCode == 429 || normalizedBody.contains("rate_limit_error") || normalizedBody.contains("rate limit")) {
+            return "rate limited";
+        }
         if (statusCode == 529 || normalizedBody.contains("overloaded_error") || normalizedBody.contains("overloaded")) {
             return "service overloaded";
         }
@@ -629,7 +650,7 @@ public final class AgentModelClient implements ModelClient {
     }
 
     private boolean isRetryableStatus(int statusCode) {
-        return statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504 || statusCode == 529;
+        return statusCode == 429 || statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504 || statusCode == 529;
     }
 
     private void recordRawHistory(BootstrapState bootstrapState, String direction, Object rawContent) {

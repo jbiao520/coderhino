@@ -115,7 +115,24 @@ class AgentModelClientToolsTest {
 
         var payload = client.buildPayload(request, false);
 
-        assertEquals(128000, payload.get("max_tokens"));
+        assertEquals(128000L, payload.get("max_tokens"));
+    }
+
+    @Test
+    void buildPayloadUsesConfiguredContextWindow() {
+        var configuredClient = new AgentModelClient(
+            HttpClient.newHttpClient(),
+            new ObjectMapper(),
+            "https://api.anthropic.com",
+            "test-key",
+            "claude-3-sonnet",
+            64000L
+        );
+        var request = new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null);
+
+        var payload = configuredClient.buildPayload(request, false);
+
+        assertEquals(64000L, payload.get("max_tokens"));
     }
 
     @Test
@@ -276,6 +293,38 @@ class AgentModelClientToolsTest {
             "Retrying LLM request: attempt 2 of 5 after service overloaded",
             "Retrying LLM request: attempt 3 of 5 after service overloaded"
         ), streamEvents.statuses);
+    }
+
+    @Test
+    void completeRetriesRateLimitedStatusUpToSuccessBeforeLimit() {
+        var httpClient = new FakeHttpClient();
+        httpClient.enqueueResponse(new FakeHttpResponse<>(429, Stream.of(
+            "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"too many requests\"}}"
+        )));
+        httpClient.enqueueResponse(new FakeHttpResponse<>(200, Stream.of(
+            "event: message_start",
+            "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":1}}}",
+            "",
+            "event: content_block_delta",
+            "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"recovered after rate limit\"}}",
+            "",
+            "event: message_stop",
+            "data: {\"type\":\"message_stop\",\"usage\":{\"output_tokens\":1}}",
+            ""
+        )));
+        var streamEvents = new CapturingModelStreamEventSink();
+        var loggingClient = new AgentModelClient(
+            httpClient,
+            new ObjectMapper(),
+            "https://api.anthropic.com",
+            "test-key",
+            "claude-3-sonnet"
+        );
+
+        var response = loggingClient.complete(newBootstrapState(), new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null), streamEvents);
+
+        assertTrue(response instanceof ModelResponse.AssistantReply reply && reply.text().equals("recovered after rate limit"));
+        assertEquals(List.of("Retrying LLM request: attempt 2 of 5 after rate limited"), streamEvents.statuses);
     }
 
     @Test

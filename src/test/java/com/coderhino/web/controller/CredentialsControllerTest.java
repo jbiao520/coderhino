@@ -17,13 +17,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CredentialsControllerTest {
 
+    private static ApiCredentials.ApiProvider.ModelConfig model(String id) {
+        return new ApiCredentials.ApiProvider.ModelConfig(id, 128000L);
+    }
+
+    private static ApiCredentials.ApiProvider.ModelConfig model(String id, long contextWindow) {
+        return new ApiCredentials.ApiProvider.ModelConfig(id, contextWindow);
+    }
+
     @Test
     void getCredentialsReturnsMaskedProviders(@TempDir Path tempDir) {
         var service = new CredentialsPersistenceService(tempDir.resolve("api-credentials.json"));
         var stored = new ApiCredentials();
         stored.setDefaultProviderId("provider-1");
         stored.setProviders(List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "test-secret-9876", "https://api.minimaxi.com/anthropic", List.of("MiniMax-M2.7"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "test-secret-9876", "https://api.minimaxi.com/anthropic", List.of(model("MiniMax-M2.7", 200000L)))
         ));
         service.save(stored);
         var controller = new CredentialsController(service);
@@ -38,7 +46,9 @@ class CredentialsControllerTest {
         assertEquals("Anthropic", provider.getName());
         assertEquals("****9876", provider.getApiKeyMasked());
         assertTrue(provider.isHasApiKey());
-        assertEquals(List.of("MiniMax-M2.7"), provider.getModels());
+        assertEquals(1, provider.getModels().size());
+        assertEquals("MiniMax-M2.7", provider.getModels().get(0).getId());
+        assertEquals(200000L, provider.getModels().get(0).getContextWindow());
     }
 
     @Test
@@ -47,8 +57,8 @@ class CredentialsControllerTest {
         var current = new ApiCredentials();
         current.setDefaultProviderId("provider-1");
         current.setProviders(List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-9876", "https://api.minimaxi.com/anthropic", List.of("MiniMax-M2.7")),
-            new ApiCredentials.ApiProvider("provider-2", "OpenAI", "openai-secret", "https://api.openai.com/v1", List.of("gpt-4o"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-9876", "https://api.minimaxi.com/anthropic", List.of(model("MiniMax-M2.7"))),
+            new ApiCredentials.ApiProvider("provider-2", "OpenAI", "openai-secret", "https://api.openai.com/v1", List.of(model("gpt-4o")))
         ));
         service.save(current);
         var controller = new CredentialsController(service);
@@ -56,7 +66,7 @@ class CredentialsControllerTest {
         var updates = new ApiCredentials();
         updates.setDefaultProviderId("provider-1");
         updates.setProviders(List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", null, "https://proxy.example/anthropic", List.of("MiniMax-M2.5"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", null, "https://proxy.example/anthropic", List.of(model("MiniMax-M2.5", 64000L)))
         ));
 
         var response = controller.updateCredentials(updates);
@@ -68,7 +78,8 @@ class CredentialsControllerTest {
         assertEquals("provider-1", provider.getId());
         assertEquals("secret-9876", provider.getApiKey());
         assertEquals("https://proxy.example/anthropic", provider.getApiBaseUrl());
-        assertEquals(List.of("MiniMax-M2.5"), provider.getModels());
+        assertEquals(List.of("MiniMax-M2.5"), provider.getModelIds());
+        assertEquals(64000L, provider.getModels().get(0).getContextWindow());
     }
 
     @Test
@@ -77,8 +88,8 @@ class CredentialsControllerTest {
         var current = new ApiCredentials();
         current.setDefaultProviderId("provider-1");
         current.setProviders(List.of(
-            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-9876", "https://api.minimaxi.com/anthropic", List.of("MiniMax-M2.7")),
-            new ApiCredentials.ApiProvider("provider-2", "OpenAI", "openai-secret", "https://api.openai.com/v1", List.of("gpt-4o", "gpt-4.1"))
+            new ApiCredentials.ApiProvider("provider-1", "Anthropic", "secret-9876", "https://api.minimaxi.com/anthropic", List.of(model("MiniMax-M2.7"))),
+            new ApiCredentials.ApiProvider("provider-2", "OpenAI", "openai-secret", "https://api.openai.com/v1", List.of(model("gpt-4o"), model("gpt-4.1", 256000L)))
         ));
         service.save(current);
         var controller = new CredentialsController(service);
@@ -86,7 +97,7 @@ class CredentialsControllerTest {
         var updates = new ApiCredentials();
         updates.setDefaultProviderId("provider-2");
         updates.setProviders(List.of(
-            new ApiCredentials.ApiProvider("provider-2", "OpenAI", null, "https://api.openai.com/v1", List.of("gpt-4o", "gpt-4.1"))
+            new ApiCredentials.ApiProvider("provider-2", "OpenAI", null, "https://api.openai.com/v1", List.of(model("gpt-4o"), model("gpt-4.1", 256000L)))
         ));
 
         var response = controller.updateCredentials(updates);

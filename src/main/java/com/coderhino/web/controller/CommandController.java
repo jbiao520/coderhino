@@ -5,6 +5,7 @@ import com.coderhino.commands.CommandDefinition;
 import com.coderhino.commands.CommandRegistry;
 import com.coderhino.commands.MarkdownCommandDefinition;
 import com.coderhino.commands.PromptBackedCommand;
+import com.coderhino.query.ModelClient;
 import com.coderhino.query.ModelClientFactory;
 import com.coderhino.query.QueryEngine;
 import com.coderhino.services.ServiceRegistry;
@@ -136,11 +137,19 @@ public class CommandController {
                 (commandContext, commandDefinition, promptText) -> executePromptCommand(commandDefinition, promptText, prompt, request.sessionId()), out, err);
             definition.execute(context, String.join(" ", args));
             var response = new CommandExecuteResponse(prompt, combineOutput(stdout, stderr, null), true, definition.name());
-            persistCommandExchange(request.sessionId(), response.prompt(), response.output());
+            if (!(definition instanceof PromptBackedCommand)) {
+                persistCommandExchange(request.sessionId(), response.prompt(), response.output());
+            } else {
+                persistSessionOnly(request.sessionId());
+            }
             return ResponseEntity.ok(response);
         } catch (Exception exception) {
             var response = new CommandExecuteResponse(prompt, combineOutput(stdout, stderr, exception.getMessage()), false, definition.name());
-            persistCommandExchange(request.sessionId(), response.prompt(), response.output());
+            if (!(definition instanceof PromptBackedCommand)) {
+                persistCommandExchange(request.sessionId(), response.prompt(), response.output());
+            } else {
+                persistSessionOnly(request.sessionId());
+            }
             return ResponseEntity.ok(response);
         }
     }
@@ -213,7 +222,7 @@ public class CommandController {
 
         ensureLatestVisibleCommand(session, visiblePrompt);
         var config = new ProviderConfigResolver().resolve(session.getProviderId(), session.getAppState().model());
-        var modelClient = ModelClientFactory.create(config.getModel(), config.getApiKey(), config.getBaseUrl());
+        var modelClient = createModelClient(config);
         var queryEngine = new QueryEngine(
             toolRegistryForPromptCommand(ToolRegistry.createDefault(), definition),
             modelClient,
@@ -227,6 +236,16 @@ public class CommandController {
         }
     }
 
+    protected ModelClient createModelClient(ProviderConfigResolver.ResolvedConfig config) {
+        return ModelClientFactory.create(
+            config.getModel(),
+            config.getApiKey(),
+            config.getBaseUrl(),
+            config.getApiType(),
+            config.getContextWindow()
+        );
+    }
+
     private void persistCommandExchange(String sessionId, String prompt, String output) {
         if (sessionId == null || sessionId.isBlank()) {
             return;
@@ -238,6 +257,13 @@ public class CommandController {
             }
             sessionRegistry.persistSessionState(session);
         });
+    }
+
+    private void persistSessionOnly(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        sessionRegistry.find(sessionId).ifPresent(sessionRegistry::persistSessionState);
     }
 
     private static void ensureLatestVisibleCommand(WebSession session, String prompt) {
