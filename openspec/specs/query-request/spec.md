@@ -61,11 +61,11 @@ The `ModelClient` interface SHALL define `complete(QueryRequest request)` instea
 - **THEN** the next `modelClient.complete()` call SHALL use a QueryRequest with updated messages but the same system prompt and same tools as the first iteration
 
 ### Requirement: Public QueryEngine API unchanged
-`QueryEngine.execute(BootstrapState, String)` and `QueryEngine.execute(BootstrapState, String, QueryEventSink)` SHALL retain their current signatures. Prompt options SHALL be threaded internally via package-private plumbing only.
+`QueryEngine.execute(BootstrapState, String)` and `QueryEngine.execute(BootstrapState, String, QueryEventSink)` SHALL retain their current signatures. Prompt options and any distinct visible-versus-raw current-turn input SHALL be threaded internally via package-private plumbing only.
 
 #### Scenario: Existing caller invokes execute unchanged
 - **WHEN** code calls `queryEngine.execute(bootstrapState, userInput)`
-- **THEN** the method SHALL return a `QueryResult` as before, using the new internal prompt assembly path
+- **THEN** the method SHALL return a `QueryResult` as before, using the same visible input and raw model input for that turn
 
 #### Scenario: Package-private prompt options
 - **WHEN** a QueryEngine is constructed with package-private prompt configuration
@@ -73,7 +73,7 @@ The `ModelClient` interface SHALL define `complete(QueryRequest request)` instea
 
 #### Scenario: Direct execute caller has not pre-added the latest user message
 - **WHEN** code calls `queryEngine.execute(bootstrapState, userInput)` and the latest message in `bootstrapState` is not a matching `UserMessage`
-- **THEN** the execution path SHALL append exactly one `UserMessage` with that content to `bootstrapState` before completing the run
+- **THEN** the execution path SHALL append exactly one visible `UserMessage` with that content to `bootstrapState` before completing the run
 
 #### Scenario: Direct execute caller already stored the latest user message
 - **WHEN** code calls `queryEngine.execute(bootstrapState, userInput)` and the latest message in `bootstrapState` is already a matching `UserMessage`
@@ -88,8 +88,20 @@ The shared query execution path SHALL persist the final assistant reply to `Boot
 
 #### Scenario: Completed run from direct execute caller
 - **WHEN** a caller invokes `execute(...)` without pre-populating the current `UserMessage`
-- **THEN** `BootstrapState` SHALL contain the triggering user message followed by exactly one persisted assistant message for the completed exchange
+- **THEN** `BootstrapState` SHALL contain the triggering visible user message followed by exactly one persisted assistant message for the completed exchange
 
-#### Scenario: Multi-turn execution keeps complete conversation history
+#### Scenario: Multi-turn execution keeps complete visible transcript
 - **WHEN** a later query is executed after one or more prior exchanges
-- **THEN** the request history sent to the model SHALL reflect the same user and assistant turns already present in `BootstrapState`, without missing user turns or duplicate assistant turns
+- **THEN** `BootstrapState` SHALL continue to reflect the visible user and assistant turns in order, without duplicate assistant turns or duplicate visible user turns
+
+### Requirement: Query request history may use distinct raw input for the current turn
+The shared query execution path SHALL support a current turn whose persisted visible `UserMessage` differs from the raw input sent to the model. In that case, the outgoing `QueryRequest.messages()` SHALL represent the visible persisted transcript for prior turns and SHALL include exactly one model-facing current-turn `UserMessage` built from the raw input for the active turn.
+
+#### Scenario: Visible and raw current-turn input match
+- **WHEN** query execution is invoked with the same visible and raw input for the current turn
+- **THEN** the resulting `QueryRequest.messages()` SHALL contain exactly one current-turn `UserMessage` matching that content
+
+#### Scenario: Visible and raw current-turn input differ
+- **WHEN** query execution is invoked with a visible persisted user message such as `/fix bug` and a distinct raw current-turn input expanded from that command
+- **THEN** `BootstrapState` SHALL persist only the visible user message for that turn
+- **THEN** `QueryRequest.messages()` SHALL contain exactly one current-turn `UserMessage` for the raw expanded input instead of appending both visible and raw forms

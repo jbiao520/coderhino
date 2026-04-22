@@ -18,3 +18,4 @@ coderhino-backend/target/
 /.playwright-mcp/
 /.opencode/
 /openspec/changes/
+/coderhino-tools/target/

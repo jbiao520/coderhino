@@ -15,7 +15,7 @@ The web chat system SHALL show the full slash command invocation, including all 
 - **THEN** the command entry shown in the chat timeline matches the same normalized command text that was shown immediately after submission
 
 ### Requirement: Refreshed web sessions restore the persisted conversation faithfully
-The web chat system SHALL reconstruct the conversation from persisted session data after a full page refresh so that visible user and assistant turns remain equivalent to the pre-refresh session transcript. This restored conversation SHALL include persisted assistant activity timelines, inline tool activity history, and related file summary metadata for completed turns whenever those artifacts were visible before refresh.
+The web chat system SHALL reconstruct the conversation from persisted session data after a full page refresh so that visible user and assistant turns remain equivalent to the pre-refresh session transcript. This restored conversation SHALL include persisted assistant activity timelines, inline tool activity history, and related file summary metadata for completed turns whenever those artifacts were visible before refresh. Terminal assistant-visible outcomes for failed, budget-limited, or tool-limited runs SHALL be restored as ordinary assistant turns using the same final text that was shown live before refresh.
 
 #### Scenario: Refresh restores command and assistant turns
 - **WHEN** a session contains a slash command entry and its assistant response and the user refreshes the chat page
@@ -33,6 +33,14 @@ The web chat system SHALL reconstruct the conversation from persisted session da
 - **WHEN** a persisted assistant message includes file summary metadata and the user refreshes the chat page
 - **THEN** the restored chat timeline SHALL render that file summary with the same assistant turn after reload
 
+#### Scenario: Refresh restores terminal error outcome shown before reload
+- **WHEN** a web run ends with a persisted terminal error message and the user refreshes the chat page
+- **THEN** the restored chat timeline SHALL include that same assistant-visible error text as the final assistant turn for the run
+
+#### Scenario: Refresh restores terminal limit outcome shown before reload
+- **WHEN** a web run ends because of budget exhaustion or tool iteration limit and the user refreshes the chat page
+- **THEN** the restored chat timeline SHALL include the same assistant-visible terminal limit text that was shown live before refresh
+
 ### Requirement: Persisted assistant content renders consistently after refresh
 The web chat system SHALL render assistant messages loaded from persisted session data with the same structured-message behavior used for equivalent live assistant content. Persisted assistant messages that also carry completed-turn activity timeline or file summary metadata SHALL preserve that metadata when rendered after refresh.
 
@@ -47,4 +55,3 @@ The web chat system SHALL render assistant messages loaded from persisted sessio
 #### Scenario: Structured or plain assistant message retains completed-turn metadata
 - **WHEN** a persisted assistant message includes activity timeline or file summary metadata and the browser refreshes the page
 - **THEN** the refreshed chat page SHALL render the assistant content together with that metadata instead of dropping the auxiliary transcript history
-

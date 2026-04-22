@@ -168,7 +168,7 @@ The system SHALL submit prompt-backed, web-compatible slash commands from ChatPa
 - **THEN** the browser SHALL continue using the standalone command execution endpoint instead of the session run endpoint
 
 ### Requirement: Web chat slash commands shall persist a visible command prompt
-The system SHALL preserve a display-ready user prompt for slash command runs so the chat timeline shows both the invoked command and the user-provided parameter text in a stable, human-readable form even when the internal prompt sent to the model is expanded from a prompt-backed command definition.
+The system SHALL preserve a display-ready user prompt for slash command runs so the chat timeline shows both the invoked command and the user-provided parameter text in a stable, human-readable form even when the internal prompt sent to the model is expanded from a prompt-backed command definition. The visible persisted prompt and the raw model prompt SHALL be treated as one logical user turn rather than two separate user messages.
 
 #### Scenario: Raw slash command is shown for direct command prompts
 - **WHEN** a slash command does not define a separate display prompt
@@ -177,6 +177,15 @@ The system SHALL preserve a display-ready user prompt for slash command runs so 
 #### Scenario: Expanded display prompt is shown for prompt-backed slash commands
 - **WHEN** a prompt-backed slash command provides a display-ready prompt prefix derived from the command definition and user arguments
 - **THEN** the persisted user message shown in the web chat timeline SHALL use that display prompt together with the submitted parameter text
+
+#### Scenario: Expanded internal prompt stays model-facing only
+- **WHEN** a prompt-backed slash command expands the submitted command into a richer internal prompt for model execution
+- **THEN** the outgoing model request SHALL use that expanded raw prompt for the active turn
+- **THEN** the persisted chat timeline SHALL continue to show only the display-ready prompt for that same turn
+
+#### Scenario: Current slash-command turn is not duplicated in request history
+- **WHEN** the visible persisted slash-command prompt and the expanded internal prompt differ for the active run
+- **THEN** query execution SHALL treat them as one logical turn and SHALL NOT append both as consecutive current-turn user messages in model request history
 
 #### Scenario: Refreshed session does not duplicate visible slash command messages
 - **WHEN** the browser refreshes session state after a slash command run completes
@@ -200,4 +209,3 @@ The system SHALL render inline model-progress items, including thinking, retry s
 #### Scenario: Retry status is also surfaced explicitly while active
 - **WHEN** the browser receives the latest retry status item for a still-active run
 - **THEN** the UI SHALL preserve the inline transcript item and SHALL also expose that retry state in a prominent active-run indicator so the user can tell the agent has not stopped
-

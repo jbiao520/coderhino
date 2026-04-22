@@ -42,19 +42,24 @@ A `PromptAssembler` class in `com.coderhino.query` SHALL accept a `ContextSnapsh
 - **THEN** the result's `systemPrompt` SHALL end with "append-me" following the default content
 
 ### Requirement: ConversationHistory no longer injects context
-`ConversationHistory.build()` SHALL NOT call `ContextCollector` or inject `SystemMessage` entries. It SHALL only read existing messages from `BootstrapState` and append the new user message if not already present.
+`ConversationHistory.build()` SHALL NOT call `ContextCollector` or inject `SystemMessage` entries. It SHALL build conversation history from persisted transcript messages plus explicit current-turn input supplied by the query execution path, and it SHALL NOT infer that the latest persisted `UserMessage` is always identical to the model-facing input for the active turn.
 
 #### Scenario: Build returns only conversation messages
-- **WHEN** `ConversationHistory.build(bootstrapState, "hello")` is called with an existing message list
-- **THEN** the result SHALL contain only `UserMessage`, `AssistantMessage`, `AssistantToolUseMessage`, and `ToolResultMessage` instances — no `SystemMessage`
+- **WHEN** conversation history is built for a turn with an existing message list
+- **THEN** the result SHALL contain only `UserMessage`, `AssistantMessage`, `AssistantToolUseMessage`, and `ToolResultMessage` instances and SHALL contain no `SystemMessage`
 
-#### Scenario: User message appended when not already present
-- **WHEN** the latest message in bootstrap state is not a UserMessage matching the input
-- **THEN** a new `UserMessage` SHALL be appended to the returned list
+#### Scenario: Current-turn user message appended when not already present
+- **WHEN** the latest persisted message is not the visible user message for the current turn
+- **THEN** the query execution path SHALL persist the visible user turn before history is built
+- **THEN** the resulting model-facing history SHALL still include exactly one current-turn user message
 
-#### Scenario: User message not duplicated when already present
-- **WHEN** the latest message in bootstrap state is a UserMessage with content matching the input
-- **THEN** no additional UserMessage SHALL be appended
+#### Scenario: Visible persisted current turn is replaced by raw model input for request history
+- **WHEN** the latest persisted message is a visible `UserMessage` for the current turn and the model-facing raw input differs
+- **THEN** the resulting model-facing history SHALL use the raw input for that current turn instead of duplicating both the visible and raw forms
+
+#### Scenario: Matching visible and raw input does not duplicate the current turn
+- **WHEN** the visible persisted input and raw model input are identical for the current turn
+- **THEN** the resulting model-facing history SHALL contain no additional duplicate `UserMessage`
 
 ### Requirement: ContextCollector output consumed by assembler
 `PromptAssembler` SHALL consume `ContextSnapshot` from `ContextCollector.collect()`. The `ContextCollector` class and `ContextSnapshot` record SHALL remain unchanged.
@@ -75,8 +80,9 @@ When `customSystemPrompt` is provided, the assembled prompt SHALL NOT include th
 - **THEN** the final systemPrompt SHALL be "my-prompt" without "environment info"
 
 ### Requirement: Multi-turn execution does not duplicate prompt content
-In a multi-turn tool loop, the system prompt SHALL be assembled once and reused across iterations. The conversation message list SHALL NOT accumulate prompt content as synthetic messages.
+In a multi-turn tool loop, the system prompt SHALL be assembled once and reused across iterations. The conversation message list SHALL NOT accumulate prompt content as synthetic messages, and the current-turn raw model input SHALL NOT cause a second visible user turn to appear in request history.
 
-#### Scenario: Three-turn tool loop
-- **WHEN** the tool loop executes three iterations with tool results between each
-- **THEN** each iteration SHALL use the same system prompt from the original QueryRequest, and the message list SHALL grow by exactly one assistant and one tool-result message per turn
+#### Scenario: Three-turn tool loop with visible/raw divergence on the latest turn
+- **WHEN** a conversation already contains prior visible user and assistant turns and the latest turn uses distinct visible and raw input before the tool loop begins
+- **THEN** each model iteration SHALL use the same assembled system prompt
+- **THEN** the initial message list for that run SHALL contain exactly one representation of the latest user turn in model-facing form

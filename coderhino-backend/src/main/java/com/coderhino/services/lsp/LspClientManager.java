@@ -1,5 +1,7 @@
 package com.coderhino.services.lsp;
 
+import com.coderhino.tools.runtime.ToolLspService;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -7,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-public final class LspClientManager {
+public final class LspClientManager implements ToolLspService {
     private final Map<String, LspServerDefinition> definitions = new LinkedHashMap<>();
     private final Map<String, LspConnection> connections = new LinkedHashMap<>();
     private final Map<String, Process> processes = new LinkedHashMap<>();
@@ -79,6 +81,7 @@ public final class LspClientManager {
         return Optional.of(disconnected);
     }
 
+    @Override
     public Optional<List<LspSymbolDescriptor>> workspaceSymbols(String language, String query) {
         if (!definitions.containsKey(language)) {
             return Optional.empty();
@@ -123,6 +126,7 @@ public final class LspClientManager {
         }
     }
 
+    @Override
     public Optional<List<LspSymbolDescriptor>> documentSymbols(String language, String uri) {
         if (!definitions.containsKey(language)) {
             return Optional.empty();
@@ -167,6 +171,7 @@ public final class LspClientManager {
         }
     }
 
+    @Override
     public Optional<List<LspLocationDescriptor>> definition(String language, String uri, int line, int character) {
         if (!definitions.containsKey(language)) {
             return Optional.empty();
@@ -211,6 +216,7 @@ public final class LspClientManager {
         }
     }
 
+    @Override
     public Optional<String> hover(String language, String uri, int line, int character) {
         if (!definitions.containsKey(language)) {
             return Optional.empty();

@@ -1,75 +1,82 @@
-# component-style-migration
+# component-style-migration Specification
 
+## Purpose
+TBD - updated by archiving change macos-style-web-ui. Refine purpose as needed.
+
+## Requirements
 ### Requirement: All components use centralized tokens
-All 16 frontend components SHALL import their color/font values from `src/styles/tokens.ts` exclusively. No component SHALL define a local `T`, `TOKENS`, or equivalent color constant. No component SHALL contain hard-coded hex color values for themeable properties.
+All frontend components SHALL import their color and font values from shared theme tokens rather than defining component-local theme constants or hard-coded themeable color values.
 
 #### Scenario: Component imports from centralized tokens
 - **WHEN** any component uses a color or font value
-- **THEN** it imports `{ T }` from `'../styles/tokens'` (or the correct relative path) and references `T.bg`, `T.accent`, etc.
+- **THEN** it imports those values from the shared theme token layer
 
 #### Scenario: No duplicate token definitions
-- **WHEN** scanning all `.tsx` files in `src/`
-- **THEN** no file contains a local const/object with properties like `bg: '#...'`, `surface: '#...'`, `border: '#...'` etc.
+- **WHEN** scanning theme-aware frontend components
+- **THEN** no file contains a duplicate local token object for shared theme colors or fonts
 
 ### Requirement: Hard borders replaced with shadows or background differentiation
-Components SHALL NOT use `border: 1px solid <hard-color>` for visual separation between content areas. Instead, components SHALL use `box-shadow` (using `--shadow-sm`, `--shadow-md` tokens) or background-color contrast (e.g., `surface` vs `bg`) for visual hierarchy.
+Components SHALL use layered surfaces, subtle hairline tokens, and elevation to separate major content areas. Components SHALL NOT rely on heavy hard-coded borders for primary hierarchy, and any visible panel edge SHALL use shared low-contrast border or hairline tokens instead of arbitrary gray lines.
 
-#### Scenario: Sidebar uses shadow for separation
-- **WHEN** the sidebar renders next to the main content area
-- **THEN** the visual separation uses `box-shadow` or no explicit border, not a hard `1px solid` line
+#### Scenario: Sidebar uses layered separation
+- **WHEN** the sidebar renders beside the main workspace
+- **THEN** the separation is created with surface contrast, shadow, or shared hairline styling rather than a heavy hard border
 
-#### Scenario: Cards use shadows instead of borders
-- **WHEN** session list items, tool activity cards, or approval items render
-- **THEN** they use `box-shadow` for elevation, not `border` for outline
+#### Scenario: Panels and cards use soft hierarchy
+- **WHEN** panels, cards, or popup surfaces render
+- **THEN** they use shared surface, shadow, and hairline primitives instead of standalone hard border styling
 
 ### Requirement: Sans-serif for all UI text
-All UI labels, titles, buttons, navigation items, form fields, status badges, and descriptive text SHALL use the sans-serif font stack (`--font-sans`). Monospace font (`--font-mono`) SHALL only be used for: code content in FileContentViewer, code blocks in chat messages, session IDs, file paths, and other machine-readable identifiers.
+All UI labels, titles, buttons, navigation items, form fields, status badges, and descriptive text SHALL use the sans-serif font stack (`--font-sans`). Monospace font (`--font-mono`) SHALL only be used for code content, identifiers, file paths, and other machine-readable values.
 
 #### Scenario: Navigation labels use sans-serif
-- **WHEN** sidebar nav items (Sessions, Approvals, Settings) render
+- **WHEN** sidebar navigation items render
 - **THEN** they use `var(--font-sans)`
-
-#### Scenario: Page titles use sans-serif
-- **WHEN** any page title (Session, Settings, Approvals) renders
-- **THEN** it uses `var(--font-sans)`
 
 #### Scenario: Monospace reserved for identifiers
 - **WHEN** a session ID, file path, or code snippet is displayed
 - **THEN** it uses `var(--font-mono)`
 
 ### Requirement: Generous Notion-style spacing
-Components SHALL use generous padding and gap values consistent with Notion's visual density. Minimum padding for interactive elements SHALL be 12px. Minimum gap between major content sections SHALL be 16px. Message areas, form fields, and list items SHALL have at least 16px vertical padding.
+Components SHALL use spacing that balances desktop density with breathing room. Toolbar controls SHALL remain compact enough for workspace-heavy screens, while major panels, cards, lists, and message areas SHALL preserve clear padding and gap values that prevent a cramped layout.
 
-#### Scenario: Sidebar nav items have adequate spacing
-- **WHEN** sidebar navigation links render
-- **THEN** each link has at least 8px vertical padding and 12px horizontal padding
+#### Scenario: Toolbar controls fit desktop workspace density
+- **WHEN** toolbar buttons, segmented controls, and search fields render in the app chrome
+- **THEN** they use compact desktop-sized heights and spacing that keep primary actions visible without feeling crowded
 
-#### Scenario: Session list items have breathing room
-- **WHEN** session list items render
-- **THEN** each item has at least 14px vertical padding and 20px horizontal padding
+#### Scenario: Content sections preserve breathing room
+- **WHEN** panels, lists, chat areas, and settings sections render
+- **THEN** each section uses shared padding and gap values that visibly separate groups of content
 
 ### Requirement: Colorful status badges
-Status badges (session status, run status, approval status) SHALL use colored backgrounds from the expanded palette (green for active/success, blue for pending/running, red for error/denied, muted gray for idle). Badge text SHALL remain readable against the background.
+Status badges SHALL use themed color treatments that keep state visible and readable across active, pending, success, error, and idle states.
 
 #### Scenario: Active session badge
-- **WHEN** a session has status "ACTIVE"
-- **THEN** the badge uses `var(--green)` background at low opacity with green text
-
-#### Scenario: Pending approval badge
-- **WHEN** an approval has status "PENDING"
-- **THEN** the badge uses `var(--accent)` background at low opacity with accent-colored text
+- **WHEN** a session has an active or success state
+- **THEN** the badge uses the theme's success treatment with readable text contrast
 
 #### Scenario: Error status badge
-- **WHEN** a run or approval has an error/denied status
-- **THEN** the badge uses `var(--red)` background at low opacity with red text
+- **WHEN** a run or approval has an error or denied state
+- **THEN** the badge uses the theme's error treatment with readable text contrast
 
 ### Requirement: Rounded corners
-Interactive elements (buttons, inputs, cards, badges) SHALL use border-radius values from the design tokens (`--radius-sm` = 6px, `--radius-md` = 10px, `--radius-lg` = 14px). Cards and panels SHALL use at least `--radius-md`. Badges and small pills SHALL use at least `--radius-sm`.
+Interactive elements and surfaces SHALL use rounded corners that match a desktop-window aesthetic. Outer shells and prominent panels SHALL use the largest radius tokens, while buttons, inputs, badges, and segmented controls SHALL use smaller shared radius tokens for a consistent control family.
 
-#### Scenario: Session list cards have rounded corners
-- **WHEN** session list items render
-- **THEN** they have `border-radius` of at least `var(--radius-md)`
+#### Scenario: Window shell and panels use stronger radii
+- **WHEN** the app shell or a major workspace panel renders
+- **THEN** it uses a shared medium-to-large radius token that is visually consistent with the macOS-style shell
 
-#### Scenario: Buttons have rounded corners
-- **WHEN** any button renders
-- **THEN** it has `border-radius` of at least `var(--radius-sm)`
+#### Scenario: Controls use consistent rounded geometry
+- **WHEN** a button, input, badge, or segmented control renders
+- **THEN** it uses a shared small-to-medium radius token rather than an arbitrary component-local radius
+
+### Requirement: Shared controls follow desktop-app interaction styling
+Shared buttons, segmented controls, search fields, tab strips, and popup triggers SHALL use one desktop-inspired interaction language across hover, focus, selected, and pressed states.
+
+#### Scenario: Interactive controls share visual states
+- **WHEN** the user hovers or focuses a shared control
+- **THEN** the control shows a consistent combination of surface change, subtle shadow, or focus ring defined by shared styles
+
+#### Scenario: Selected controls use accent treatment consistently
+- **WHEN** a tab, toolbar toggle, or segmented option is selected
+- **THEN** it uses the same shared accent and surface treatment used elsewhere in the workspace

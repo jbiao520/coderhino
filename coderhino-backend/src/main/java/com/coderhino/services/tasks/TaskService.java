@@ -1,5 +1,6 @@
 package com.coderhino.services.tasks;
 
+import com.coderhino.tools.runtime.ToolTaskService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -23,7 +24,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public final class TaskService {
+public final class TaskService implements ToolTaskService {
     private final ObjectMapper objectMapper;
     private final Path storagePath;
     private final Map<UUID, TaskRecord> tasks = new LinkedHashMap<>();
@@ -50,6 +51,7 @@ public final class TaskService {
         loadFromDisk();
     }
 
+    @Override
     public TaskRecord create(String description) {
         var now = Instant.now();
         var record = new TaskRecord(UUID.randomUUID(), description, TaskStatus.RUNNING.value(), now, now);
@@ -93,6 +95,7 @@ public final class TaskService {
         return record;
     }
 
+    @Override
     public List<TaskRecord> list() {
         return new ArrayList<>(tasks.values());
     }
@@ -105,6 +108,7 @@ public final class TaskService {
             .toList();
     }
 
+    @Override
     public Optional<TaskRecord> get(String id) {
         try {
             return Optional.ofNullable(tasks.get(UUID.fromString(id)));
@@ -121,6 +125,7 @@ public final class TaskService {
      * Retrieve task output, blocking briefly (max 100ms) if the task is still running.
      * Returns empty if task doesn't exist, is still running after timeout, or has no output.
      */
+    @Override
     public Optional<String> getOutputAwait(String id) {
         try {
             var uuid = UUID.fromString(id);
@@ -141,6 +146,7 @@ public final class TaskService {
         }
     }
 
+    @Override
     public Optional<TaskRecord> stop(String id) {
         return update(id, "stopped");
     }
@@ -167,6 +173,7 @@ public final class TaskService {
         }
     }
 
+    @Override
     public Optional<TaskRecord> update(String id, String status) {
         var normalizedStatus = status == null ? "" : status.trim();
         if (normalizedStatus.isBlank()) {

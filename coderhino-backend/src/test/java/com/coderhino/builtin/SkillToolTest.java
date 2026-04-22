@@ -2,11 +2,15 @@ package com.coderhino.builtin;
 
 import com.coderhino.commands.CommandRegistry;
 import com.coderhino.commands.PromptBackedCommand;
+import com.coderhino.query.SubAgentContext;
 import com.coderhino.state.AppState;
 import com.coderhino.state.BootstrapState;
 import com.coderhino.state.SessionRuntime;
 import com.coderhino.tools.ToolContext;
 import com.coderhino.tools.builtin.SkillTool;
+import com.coderhino.tools.runtime.ToolAgentExecutor;
+import com.coderhino.tools.runtime.ToolBootstrapState;
+import com.coderhino.tools.runtime.ToolServices;
 import com.coderhino.types.PermissionMode;
 import org.junit.jupiter.api.Test;
 
@@ -62,32 +66,11 @@ class SkillToolTest {
     }
 
     private static ToolContext toolContext() {
-        var state = new BootstrapState(new AppState(
-            false,
-            "MiniMax-M2.5",
-            Path.of("").toAbsolutePath().normalize().toString(),
-            false,
-            false,
-            PermissionMode.BYPASS,
-            0.0,
-            new SessionRuntime(UUID.randomUUID(), null, null, List.of(), List.of(), List.of()),
-            List.of()
-        ));
-        return new ToolContext(state, PermissionMode.BYPASS);
+        var registry = CommandRegistry.createDefault(Path.of("").toAbsolutePath().normalize());
+        return new ToolContext(toolBootstrapState(), PermissionMode.BYPASS, null, null, registry.asToolCommandRegistry(), null);
     }
 
     private static ToolContext toolContextWithCustomSkill() {
-        var state = new BootstrapState(new AppState(
-            false,
-            "MiniMax-M2.5",
-            Path.of("").toAbsolutePath().normalize().toString(),
-            false,
-            false,
-            PermissionMode.BYPASS,
-            0.0,
-            new SessionRuntime(UUID.randomUUID(), null, null, List.of(), List.of(), List.of()),
-            List.of()
-        ));
         var registry = new CommandRegistry(List.of(
             new com.coderhino.commands.MarkdownCommandDefinition(
                 new com.coderhino.commands.MarkdownPromptDefinition(
@@ -107,10 +90,17 @@ class SkillToolTest {
                 )
             )
         ));
-        return new ToolContext(state, PermissionMode.BYPASS, null, null, registry);
+        return new ToolContext(toolBootstrapState(), PermissionMode.BYPASS, null, null, registry.asToolCommandRegistry(), null);
     }
 
     private static ToolContext toolContextWithPromptBackedCommand() {
+        var registry = new CommandRegistry(List.of(
+            new PromptBackedSkill("init", "Initialize Claude", "Inspect repository first for: $ARGUMENTS", List.of("bash", "ask_user_question"))
+        ));
+        return new ToolContext(toolBootstrapState(), PermissionMode.BYPASS, null, null, registry.asToolCommandRegistry(), null);
+    }
+
+    private static ToolBootstrapState toolBootstrapState() {
         var state = new BootstrapState(new AppState(
             false,
             "MiniMax-M2.5",
@@ -122,10 +112,22 @@ class SkillToolTest {
             new SessionRuntime(UUID.randomUUID(), null, null, List.of(), List.of(), List.of()),
             List.of()
         ));
-        var registry = new CommandRegistry(List.of(
-            new PromptBackedSkill("init", "Initialize Claude", "Inspect repository first for: $ARGUMENTS", List.of("bash", "ask_user_question"))
-        ));
-        return new ToolContext(state, PermissionMode.BYPASS, null, null, registry);
+        return new ToolBootstrapState() {
+            @Override
+            public String cwd() {
+                return state.get().cwd();
+            }
+
+            @Override
+            public UUID sessionId() {
+                return state.get().sessionRuntime().sessionId();
+            }
+
+            @Override
+            public void updatePermissionMode(PermissionMode permissionMode) {
+                state.update(current -> current.withPermissionMode(permissionMode));
+            }
+        };
     }
 
     private record PromptBackedSkill(

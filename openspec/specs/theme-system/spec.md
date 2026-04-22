@@ -1,65 +1,64 @@
-# theme-system
+# theme-system Specification
 
+## Purpose
+TBD - updated by archiving change macos-style-web-ui. Refine purpose as needed.
+
+## Requirements
 ### Requirement: CSS custom property theme palettes
-The system SHALL define two color palettes via CSS custom properties on `:root` (light) and `[data-theme="dark"]` (dark). Both palettes SHALL use warm tones — the light palette SHALL use warm whites/creams and the dark palette SHALL use warm grays (not blue-tinted blacks).
+The system SHALL define two color palettes via CSS custom properties on `:root` (light) and `[data-theme="dark"]` (dark). Both palettes SHALL support a macOS-inspired visual language with neutral window tones, cool translucent chrome surfaces, desktop-style blue accents, subtle hairlines, and layered elevation for application shells and panels.
 
-Tokens SHALL include: `--bg`, `--surface`, `--sidebar`, `--border`, `--text`, `--text-muted`, `--accent`, `--accent-hover`, `--green`, `--red`, `--purple`, `--orange`, `--pink`, `--shadow-sm`, `--shadow-md`, `--shadow-lg`, `--radius-sm`, `--radius-md`, `--radius-lg`, `--font-sans`, `--font-mono`.
+Tokens SHALL include: `--bg`, `--surface`, `--surface-hover`, `--surface-accent`, `--sidebar`, `--panel`, `--panel-muted`, `--window-bg`, `--window-chrome`, `--glass-bg`, `--glass-border`, `--border`, `--border-strong`, `--hairline`, `--text`, `--text-muted`, `--text-on-accent`, `--accent`, `--accent-hover`, `--accent-soft`, `--green`, `--red`, `--purple`, `--orange`, `--pink`, `--shadow-sm`, `--shadow-md`, `--shadow-lg`, `--shadow-xl`, `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--font-sans`, `--font-mono`.
 
-#### Scenario: Light palette renders warm colors
+#### Scenario: Light palette renders macOS-inspired chrome
 - **WHEN** the `<html>` element has no `data-theme` attribute or `data-theme="light"`
-- **THEN** CSS custom properties resolve to warm light values (e.g., `--bg: #ffffff`, `--text: #37352f`)
+- **THEN** CSS custom properties resolve to a bright neutral workspace palette with distinct window chrome, layered panel surfaces, and a saturated desktop-blue accent
 
-#### Scenario: Dark palette renders warm dark colors
+#### Scenario: Dark palette renders macOS-inspired dark chrome
 - **WHEN** the `<html>` element has `data-theme="dark"`
-- **THEN** CSS custom properties resolve to warm dark values (e.g., `--bg: #191919`, `--text: #e2e0dc`)
+- **THEN** CSS custom properties resolve to a dark graphite workspace palette with readable translucent shell surfaces, layered panel contrast, and the same accent semantics as light mode
+
+### Requirement: Theme tokens support shell translucency and fallbacks
+The system SHALL expose theme tokens that allow shell chrome and popup surfaces to render with translucency when supported while preserving opaque fallback values that remain legible in all supported browsers.
+
+#### Scenario: Shell uses tokenized translucent surfaces
+- **WHEN** a shell or popup surface needs glass-like styling
+- **THEN** the surface uses shared theme tokens such as `--glass-bg` and `--glass-border` rather than component-local color values
+
+#### Scenario: Fallback values remain part of the theme contract
+- **WHEN** translucency effects are unavailable or disabled
+- **THEN** the same tokenized surfaces still render with solid theme values that preserve contrast and separation
 
 ### Requirement: Centralized token bridge
-`src/styles/tokens.ts` SHALL export a `T` object where every color value is a CSS variable reference string (e.g., `'var(--bg)'`). `src/types/theme.ts` SHALL be deleted. All components SHALL import tokens from `src/styles/tokens.ts` only.
+`src/styles/tokens.ts` SHALL export a `T` object where every color value is a CSS variable reference string. All components SHALL import tokens from that shared token source.
 
 #### Scenario: Component references token
-- **WHEN** a component uses `T.bg` in an inline style
-- **THEN** the rendered element has `background: var(--bg)` which resolves to the current theme's value
+- **WHEN** a component uses a shared token in inline styles or stylesheets
+- **THEN** the rendered UI resolves those references from the active CSS custom properties
 
 ### Requirement: useTheme hook
 The system SHALL provide a `useTheme` hook in `src/hooks/useTheme.ts` that resolves the effective theme from backend settings and system preference, sets `data-theme` on `<html>`, and persists the resolved theme to localStorage for instant-load on next visit.
 
 #### Scenario: System theme follows OS preference
-- **WHEN** user selects "system" in settings and OS is in dark mode
-- **THEN** `document.documentElement.dataset.theme` is set to `"dark"`
-
-#### Scenario: System theme follows OS preference (light)
-- **WHEN** user selects "system" in settings and OS is in light mode
-- **THEN** `document.documentElement.dataset.theme` is set to `"light"`
+- **WHEN** user selects `system` in settings and OS is in dark mode
+- **THEN** `document.documentElement.dataset.theme` is set to `dark`
 
 #### Scenario: Explicit theme overrides system
-- **WHEN** user selects "dark" in settings regardless of OS preference
-- **THEN** `document.documentElement.dataset.theme` is set to `"dark"`
+- **WHEN** user selects `dark` in settings regardless of OS preference
+- **THEN** `document.documentElement.dataset.theme` is set to `dark`
 
-#### Scenario: Theme persists across reloads
-- **WHEN** user sets theme to "light" and reloads the page
-- **THEN** the page renders in light mode without a flash of wrong theme
-
-#### Scenario: OS preference change updates theme in real-time
-- **WHEN** user has "system" theme selected and changes OS from light to dark
-- **THEN** the UI switches to dark theme without page reload
+#### Scenario: OS preference change updates theme in real time
+- **WHEN** user has `system` theme selected and changes OS theme
+- **THEN** the UI switches themes without a page reload
 
 ### Requirement: Theme toggle control
-The sidebar footer SHALL display a clickable theme icon that cycles through light → dark → system on each click. The icon SHALL display 🌞 for light, 🌙 for dark, and 💻 for system. The selection SHALL be persisted via the existing settings API.
+The UI SHALL expose a theme control that allows the user to switch among light, dark, and system modes, and the selection SHALL persist via the existing settings flow.
 
-#### Scenario: Toggle cycles themes
-- **WHEN** user clicks the theme icon while in light mode
-- **THEN** theme switches to dark, icon changes to 🌙
-
-#### Scenario: Toggle wraps around to system
-- **WHEN** user clicks the theme icon while in dark mode
-- **THEN** theme switches to system, icon changes to 💻
+#### Scenario: Toggle changes theme mode
+- **WHEN** the user changes the current theme mode from the UI
+- **THEN** the selected theme becomes active and is persisted
 
 ### Requirement: No flash of wrong theme on initial load
 The system SHALL set `data-theme` on `<html>` before React renders by reading from localStorage in `index.html` or a synchronous script block.
-
-#### Scenario: First visit with no saved preference
-- **WHEN** user visits for the first time with no localStorage entry
-- **THEN** the page renders in light mode (default)
 
 #### Scenario: Returning visit with saved preference
 - **WHEN** user previously selected dark mode and returns

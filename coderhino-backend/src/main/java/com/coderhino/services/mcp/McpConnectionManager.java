@@ -1,5 +1,6 @@
 package com.coderhino.services.mcp;
 
+import com.coderhino.tools.runtime.ToolMcpService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -14,7 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-public final class McpConnectionManager {
+public final class McpConnectionManager implements ToolMcpService {
     private static final Logger log = LoggerFactory.getLogger(McpConnectionManager.class);
     private static final int DEFAULT_MAX_RECONNECT_ATTEMPTS = 3;
     private static final long RECONNECT_BASE_DELAY_MS = 100;
@@ -154,6 +155,7 @@ public final class McpConnectionManager {
         return connect(serverName);
     }
 
+    @Override
     public Optional<List<McpToolDescriptor>> listTools(String serverName) {
         if (!definitions.containsKey(serverName)) {
             return Optional.empty();
@@ -186,6 +188,7 @@ public final class McpConnectionManager {
         }
     }
 
+    @Override
     public Optional<List<McpResourceDescriptor>> listResources(String serverName) {
         if (!definitions.containsKey(serverName)) {
             return Optional.empty();
@@ -212,6 +215,7 @@ public final class McpConnectionManager {
         }
     }
 
+    @Override
     public Optional<String> readResource(String serverName, String uri) {
         if (!definitions.containsKey(serverName)) {
             return Optional.empty();
@@ -276,6 +280,7 @@ public final class McpConnectionManager {
         return callTool(serverName, toolName, objectMapper.createObjectNode());
     }
 
+    @Override
     public Optional<String> callTool(String serverName, String toolName, JsonNode arguments) {
         if (!definitions.containsKey(serverName)) {
             return Optional.empty();
@@ -518,7 +523,8 @@ public final class McpConnectionManager {
         return diagnostics.snapshotSingleLine();
     }
 
-    public Optional<ResolvedMcpTool> resolveTool(String qualifiedToolName) {
+    @Override
+    public Optional<ResolvedTool> resolveTool(String qualifiedToolName) {
         var parsed = McpToolName.parse(qualifiedToolName);
         if (parsed.isEmpty()) {
             return Optional.empty();
@@ -532,13 +538,18 @@ public final class McpConnectionManager {
             var tools = listTools(definition.name()).orElse(List.of());
             for (var tool : tools) {
                 if (McpToolName.normalize(tool.name()).equals(parsed.get().toolName())) {
-                    return Optional.of(new ResolvedMcpTool(definition.name(), tool.name(), tool));
+                    return Optional.of(new ResolvedTool(definition.name(), tool.name(), tool));
                 }
             }
             return Optional.empty();
         }
 
         return Optional.empty();
+    }
+
+    @Override
+    public Collection<String> serverNames() {
+        return List.copyOf(definitions.keySet());
     }
 
     private void invalidateDiscoveredTools(String serverName) {
@@ -580,6 +591,4 @@ public final class McpConnectionManager {
         }
     }
 
-    public record ResolvedMcpTool(String serverName, String toolName, McpToolDescriptor descriptor) {
-    }
 }

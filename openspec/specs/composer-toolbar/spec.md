@@ -1,27 +1,30 @@
 # composer-toolbar Specification
 
 ## Purpose
-TBD - created by archiving change add-composer-toolbar. Update Purpose after archive.
+TBD - created by archiving change add-composer-toolbar and updated by archiving change macos-style-web-ui.
+
 ## Requirements
-### Requirement: Composer toolbar exposes run configuration controls
-The web chat composer SHALL render a toolbar adjacent to the message input that lets the user inspect and change the active run configuration before submitting a message.
+### Requirement: Toolbar is shown with composer
+The web chat composer SHALL render a toolbar integrated with the surrounding workspace chrome so the run configuration controls feel like part of the desktop-style shell rather than a disconnected web form.
 
 #### Scenario: Toolbar is shown with composer
 - **WHEN** a user opens a chat session in the web UI
-- **THEN** the composer displays a toolbar in the input area
+- **THEN** the composer displays a desktop-style toolbar in the input area
 - **THEN** the toolbar includes a model selector
 - **THEN** the toolbar includes controls for build mode and plan mode
 
 ### Requirement: Session toolbar actions use accurate affordances
-The web chat composer SHALL present session-related toolbar actions with labels and icons that match their behavior so users can identify them without guesswork.
+The web chat composer SHALL present session-related toolbar actions with icons, labels, grouping, and selected states that match the macOS-inspired control language while remaining understandable without guesswork.
 
 #### Scenario: New session button exposes tooltip
 - **WHEN** a user hovers the new session button in the workspace toolbar
 - **THEN** the UI shows a tooltip with the text `new session`
+- **THEN** the button styling matches the shared desktop-style toolbar controls
 
 #### Scenario: Panel fold action uses a matching icon
 - **WHEN** a user views the main toolbar action that folds the left panel
 - **THEN** the action uses an icon that communicates panel folding rather than a folder or file-system action
+- **THEN** the action uses the same toolbar button treatment as adjacent session controls
 
 ### Requirement: Composer toolbar initializes from session-backed state
 The system SHALL provide the chat composer with the current session configuration needed to render the toolbar state consistently across refreshes and resumed sessions.
@@ -61,7 +64,7 @@ The system SHALL prevent sending a stale or unsupported model mode when the acti
 - **THEN** the next submission does not include an unsupported model mode value
 
 ### Requirement: Toolbar remains usable during normal chat interaction
-The system SHALL preserve existing composer behavior while adding the toolbar controls, and toolbar affordances SHALL remain understandable during normal chat interaction.
+The system SHALL preserve existing composer behavior while presenting the toolbar as part of the macOS-style workspace chrome, and toolbar affordances SHALL remain clear during normal chat interaction on both desktop and smaller screens.
 
 #### Scenario: Existing send behavior is preserved
 - **WHEN** a user types a message and presses Enter without Shift
@@ -70,4 +73,4 @@ The system SHALL preserve existing composer behavior while adding the toolbar co
 
 #### Scenario: Toolbar actions remain understandable
 - **WHEN** a user interacts with session-related actions in the toolbar during normal chat use
-- **THEN** hover text and icons make each action's purpose clear without changing submission behavior
+- **THEN** hover text, grouping, and selected states make each action's purpose clear without changing submission behavior

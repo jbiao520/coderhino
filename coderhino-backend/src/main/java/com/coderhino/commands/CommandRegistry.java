@@ -1,5 +1,8 @@
 package com.coderhino.commands;
 
+import com.coderhino.tools.runtime.ToolCommand;
+import com.coderhino.tools.runtime.ToolCommandRegistry;
+
 import com.coderhino.commands.builtin.AddDirCommand;
 import com.coderhino.commands.builtin.AgentsCommand;
 import com.coderhino.commands.builtin.AutofixPrCommand;
@@ -166,6 +169,10 @@ public final class CommandRegistry {
         return Optional.ofNullable(commands.get(name));
     }
 
+    public ToolCommandRegistry asToolCommandRegistry() {
+        return name -> find(name).map(CommandAdapter::new);
+    }
+
     public Collection<CommandDefinition> all() {
         return definitions;
     }
@@ -184,5 +191,39 @@ public final class CommandRegistry {
             reserved.addAll(definition.aliases());
         }
         return reserved;
+    }
+
+    private record CommandAdapter(CommandDefinition definition) implements ToolCommand {
+        @Override
+        public String name() {
+            return definition.name();
+        }
+
+        @Override
+        public String description() {
+            return definition.description();
+        }
+
+        @Override
+        public boolean includeInModelContext() {
+            return definition.includeInModelContext();
+        }
+
+        @Override
+        public boolean promptBacked() {
+            return definition instanceof PromptBackedCommand;
+        }
+
+        @Override
+        public String prompt(String args) {
+            return ((PromptBackedCommand) definition).prompt(args);
+        }
+
+        @Override
+        public List<String> allowedTools() {
+            return definition instanceof PromptBackedCommand promptBacked
+                ? promptBacked.allowedTools()
+                : ToolCommand.super.allowedTools();
+        }
     }
 }

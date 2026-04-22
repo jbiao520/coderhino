@@ -1,15 +1,16 @@
 # File Panel Specification
 
+## Requirements
 ### Requirement: Resizable file panel
-The system SHALL render a file panel on the right side of the chat view. The panel width SHALL be adjustable by dragging a handle on its left edge. The panel width SHALL be clamped between 280px and 800px. The default width SHALL be 480px. The panel width SHALL be persisted to localStorage and restored on subsequent loads.
+The system SHALL render a file panel on the right side of the chat view. The panel width SHALL be adjustable by dragging a handle on its left edge. The panel SHALL remain visually anchored to the right edge of the chat workspace while its width changes, so shrinking the panel moves its left edge rightward and widening the panel moves its left edge leftward. The panel width SHALL be clamped between 280px and 800px. The default width SHALL be 480px. The panel width SHALL be persisted to localStorage and restored on subsequent loads. While the user drags the resize handle, the panel width SHALL be calculated relative to the panel's workspace container so the panel remains flush with the visible right edge of the chat layout.
 
 #### Scenario: User drags the resize handle to widen the panel
-- **WHEN** the file panel is open and the user presses the mouse button on the drag handle and moves the mouse rightward
-- **THEN** the panel width increases, clamped to a maximum of 800px
+- **WHEN** the file panel is open and the user presses the mouse button on the drag handle and moves the mouse leftward
+- **THEN** the panel width increases, clamped to a maximum of 800px, while the panel remains flush with the workspace's right edge
 
 #### Scenario: User drags the resize handle to narrow the panel
-- **WHEN** the user presses the mouse button on the drag handle and moves the mouse leftward
-- **THEN** the panel width decreases, clamped to a minimum of 280px
+- **WHEN** the user presses the mouse button on the drag handle and moves the mouse rightward
+- **THEN** the panel width decreases, clamped to a minimum of 280px, while the panel remains flush with the workspace's right edge
 
 #### Scenario: Panel width is restored from localStorage
 - **WHEN** the user opens the file panel after previously resizing it
@@ -18,6 +19,10 @@ The system SHALL render a file panel on the right side of the chat view. The pan
 #### Scenario: Panel width localStorage value is out of bounds
 - **WHEN** the stored width is less than 280px or greater than 800px
 - **THEN** the panel clamps to the nearest valid bound (280 or 800)
+
+#### Scenario: Panel stays aligned with the workspace edge during resize
+- **WHEN** the chat workspace does not extend to the full browser width and the user drags the file panel resize handle rightward
+- **THEN** the panel remains attached to the visible right edge of the workspace and the layout does not reveal blank space to the right of the panel
 
 ### Requirement: Tab bar with persistent tree tab
 The file panel SHALL display a tab bar at the top. The leftmost tab SHALL be a non-closable "Tree" tab. Each opened file SHALL appear as a closable tab to the right of the tree tab. Only one tab SHALL be active at a time. The active tab SHALL be visually distinct.

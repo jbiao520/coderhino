@@ -48,12 +48,13 @@ import com.coderhino.services.memory.LocalTeamMemoryService;
 import com.coderhino.services.memory.NoOpTeamMemoryService;
 import com.coderhino.services.memory.TeamMemoryService;
 import com.coderhino.services.summary.FileChangeTracker;
+import com.coderhino.tools.runtime.ToolServices;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-public final class ServiceRegistry {
+public final class ServiceRegistry implements ToolServices {
     private final McpConnectionManager mcpConnectionManager;
     private final LspClientManager lspClientManager;
     private final TaskService taskService;
@@ -200,14 +201,17 @@ public final class ServiceRegistry {
         return new ServiceRegistry(mcp, lsp, tasks, costs, compact, analytics, featureFlags, server, plugins, skillService, coordinator, proactive, new DefaultCronScheduler(featureFlags), new DefaultRemoteTriggerService(), new DefaultVoiceService(featureFlags), new LocalSettingsSyncService(cwd.resolve(".coderhino").resolve("settings-sync.json")), new LocalTeamMemoryService(cwd.resolve(".coderhino").resolve("team-memory")));
     }
 
+    @Override
     public McpConnectionManager mcp() {
         return mcpConnectionManager;
     }
 
+    @Override
     public LspClientManager lsp() {
         return lspClientManager;
     }
 
+    @Override
     public TaskService tasks() {
         return taskService;
     }
@@ -224,6 +228,7 @@ public final class ServiceRegistry {
         return analyticsService;
     }
 
+    @Override
     public FeatureFlagService featureFlags() {
         return featureFlagService;
     }
@@ -248,10 +253,12 @@ public final class ServiceRegistry {
         return proactiveService;
     }
 
+    @Override
     public CronScheduler cronScheduler() {
         return cronScheduler;
     }
 
+    @Override
     public RemoteTriggerService remoteTriggerService() {
         return remoteTriggerService;
     }

@@ -26,6 +26,12 @@
             <scope>provided</scope>
         </dependency>
 
+        <dependency>
+            <groupId>com.coderhino</groupId>
+            <artifactId>coderhino-tools</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Picocli for CLI parsing with @Command annotations -->
         <dependency>
             <groupId>info.picocli</groupId>

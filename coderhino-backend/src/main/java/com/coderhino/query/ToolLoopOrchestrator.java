@@ -11,6 +11,8 @@ import com.coderhino.state.BootstrapState;
 import com.coderhino.tools.ToolContext;
 import com.coderhino.tools.ToolDefinition;
 import com.coderhino.tools.ToolRegistry;
+import com.coderhino.tools.runtime.ToolAgentExecutor;
+import com.coderhino.tools.runtime.ToolBootstrapState;
 import com.coderhino.types.Message;
 import com.coderhino.types.PermissionMode;
 import com.coderhino.types.PermissionResult;
@@ -262,7 +264,14 @@ final class ToolLoopOrchestrator {
         String sourceAssistantMessageId,
         PermissionMode permissionMode
     ) {
-        var toolContext = new ToolContext(bootstrapState, permissionMode, serviceRegistry, subAgentContext);
+        var toolContext = new ToolContext(
+            new BootstrapStateAdapter(bootstrapState),
+            permissionMode,
+            serviceRegistry,
+            subAgentContext,
+            com.coderhino.commands.CommandRegistry.createDefault(Path.of(bootstrapState.get().cwd())).asToolCommandRegistry(),
+            new QueryEngineToolAgentExecutor(bootstrapState, permissionMode)
+        );
         var sessionId = QueryLogFormatter.sessionId(bootstrapState);
 
         try {
@@ -423,7 +432,7 @@ final class ToolLoopOrchestrator {
     }
 
     private void notifyFileChange(String toolName, Map<String, Object> arguments, ToolContext toolContext, Path resolvedPath, boolean existedBefore) {
-        var sessionUuid = toolContext.bootstrapState().get().sessionRuntime().sessionId();
+        var sessionUuid = toolContext.bootstrapState().sessionId();
 
         switch (toolName) {
             case "write_file" -> {
@@ -440,7 +449,7 @@ final class ToolLoopOrchestrator {
             case "bash" -> {
                 var command = arguments != null ? (String) arguments.get("command") : null;
                 if (command != null) {
-                    var cwd = Path.of(toolContext.bootstrapState().get().cwd());
+                    var cwd = Path.of(toolContext.bootstrapState().cwd());
                     for (var parsed : BashCommandFileParser.parse(command, cwd)) {
                         fileChangeListener.onFileChange(sessionUuid, parsed);
                     }
@@ -456,7 +465,58 @@ final class ToolLoopOrchestrator {
         if (rawPath == null || rawPath.isBlank()) return null;
         var path = Path.of(rawPath);
         if (path.isAbsolute()) return path.normalize();
-        return Path.of(toolContext.bootstrapState().get().cwd()).resolve(path).normalize();
+        return Path.of(toolContext.bootstrapState().cwd()).resolve(path).normalize();
+    }
+
+    private final class QueryEngineToolAgentExecutor implements ToolAgentExecutor {
+        private final BootstrapState bootstrapState;
+        private final PermissionMode fallbackPermissionMode;
+
+        private QueryEngineToolAgentExecutor(BootstrapState bootstrapState, PermissionMode fallbackPermissionMode) {
+            this.bootstrapState = bootstrapState;
+            this.fallbackPermissionMode = fallbackPermissionMode;
+        }
+
+        @Override
+        public ToolAgentExecutor.SyncResult executeSync(ToolAgentExecutor.Request request) {
+            var subAgentState = new BootstrapState(bootstrapState.get()
+                .withPermissionMode(request.subAgentContext() != null
+                    ? request.subAgentContext().permissionMode()
+                    : fallbackPermissionMode));
+            var engine = new QueryEngine(
+                toolRegistry,
+                modelClient,
+                permissionChecker,
+                new com.coderhino.context.ContextCollector(),
+                serviceRegistry,
+                request.subAgentContext()
+            );
+            var result = engine.execute(subAgentState, request.prompt());
+            return new ToolAgentExecutor.SyncResult(result.text(), result.stopReason().name().toLowerCase());
+        }
+
+        @Override
+        public ToolAgentExecutor.AsyncResult executeAsync(ToolAgentExecutor.Request request) {
+            var task = serviceRegistry.tasks().submit(request.description(), () -> executeSync(request).text());
+            return new ToolAgentExecutor.AsyncResult(task.id().toString(), request.description(), task.status());
+        }
+    }
+
+    private record BootstrapStateAdapter(BootstrapState delegate) implements ToolBootstrapState {
+        @Override
+        public String cwd() {
+            return delegate.get().cwd();
+        }
+
+        @Override
+        public UUID sessionId() {
+            return delegate.get().sessionRuntime().sessionId();
+        }
+
+        @Override
+        public void updatePermissionMode(PermissionMode permissionMode) {
+            delegate.update(current -> current.withPermissionMode(permissionMode));
+        }
     }
 
     @FunctionalInterface
