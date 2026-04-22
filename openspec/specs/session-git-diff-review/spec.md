@@ -5,9 +5,9 @@ Support reviewing file-specific git changes in the web session UI, including dif
 The system SHALL allow the user to select a tracked change from the session git panel and open a full-size popup that displays the diff for that file in the active session worktree.
 
 #### Scenario: Open diff for a tracked file
-- **WHEN** the session git panel lists a tracked file `src/main/client/src/components/SessionGitPanel.tsx` and the user clicks that file entry
+- **WHEN** the session git panel lists a tracked file `frontend/src/components/SessionGitPanel.tsx` and the user clicks that file entry
 - **THEN** the system opens a popup overlay for git diff review
-- **THEN** the popup requests the diff for `src/main/client/src/components/SessionGitPanel.tsx` in the active session worktree
+- **THEN** the popup requests the diff for `frontend/src/components/SessionGitPanel.tsx` in the active session worktree
 - **THEN** the popup displays the returned diff content in a scrollable review area
 
 ### Requirement: Diff popup communicates loading and failure states
@@ -176,4 +176,3 @@ The backend SHALL accept file-specific session diff requests with an explicit co
 #### Scenario: Request file diff with no remaining context
 - **WHEN** the client requests session git diff review for a valid file path and the response already includes the full available context
 - **THEN** the backend indicates in the response that no more context is available for additional expansion
-

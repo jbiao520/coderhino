@@ -432,6 +432,7 @@ class CommandControllerTest {
 
     private static final class TestableCommandController extends CommandController {
         private final ModelClient modelClient;
+        private final com.coderhino.web.credentials.ProviderConfigResolver providerConfigResolver;
 
         private TestableCommandController(
             CommandRegistry commandRegistry,
@@ -445,11 +446,29 @@ class CommandControllerTest {
         ) {
             super(commandRegistry, bootstrapState, sessionStore, serviceRegistry, sessionRegistry, readCommandWebService, commandAudioStore);
             this.modelClient = modelClient;
+            this.providerConfigResolver = new com.coderhino.web.credentials.ProviderConfigResolver() {
+                @Override
+                public ResolvedConfig resolve(String providerId, String requestedModel) {
+                    return new ResolvedConfig(
+                        providerId == null || providerId.isBlank() ? "test-provider" : providerId,
+                        "test-key",
+                        "https://example.invalid",
+                        requestedModel == null || requestedModel.isBlank() ? "MiniMax-M2.5" : requestedModel,
+                        com.coderhino.query.ProviderApiType.CLAUDE_CODE,
+                        128000L
+                    );
+                }
+            };
         }
 
         @Override
         protected ModelClient createModelClient(com.coderhino.web.credentials.ProviderConfigResolver.ResolvedConfig config) {
             return modelClient;
+        }
+
+        @Override
+        protected com.coderhino.web.credentials.ProviderConfigResolver createProviderConfigResolver() {
+            return providerConfigResolver;
         }
     }
 

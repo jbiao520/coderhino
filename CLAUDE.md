@@ -5,33 +5,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run Commands
 
 ```bash
-# Full build (includes frontend React app via frontend-maven-plugin)
+# Full build (includes frontend React app via the frontend module)
 mvn clean package
 
 # Build skipping tests
 mvn clean package -DskipTests
 
 # Run tests
-mvn test
+mvn -pl coderhino-backend -am test
 
 # Run a single test class
-mvn test -Dtest=QueryEngineTest
+mvn -pl coderhino-backend -am test -Dtest=QueryEngineTest
 
 # Run a single test method
-mvn test -Dtest=QueryEngineTest#testToolExecution
+mvn -pl coderhino-backend -am test -Dtest=QueryEngineTest#testToolExecution
 
-# Run the CLI (REPL mode)
-mvn spring-boot:run
-# or after building:
-java -jar target/coderhino-1.0.0-SNAPSHOT.jar
+# Run the CLI / web app after building:
+java -jar coderhino-backend/target/coderhino-backend-1.0.0-SNAPSHOT.jar
 
 # Run as web server
-java -jar target/coderhino-1.0.0-SNAPSHOT.jar --serve --port 8080
+java -jar coderhino-backend/target/coderhino-backend-1.0.0-SNAPSHOT.jar --serve --port 8080
 
 # Print bootstrap state (debug)
-java -jar target/coderhino-1.0.0-SNAPSHOT.jar --print-state
+java -jar coderhino-backend/target/coderhino-backend-1.0.0-SNAPSHOT.jar --print-state
 
-# Frontend only (from src/main/client/)
+# Frontend only (from frontend/)
 npm run dev          # Vite dev server
 npm run build        # Production build
 npm run test         # Vitest
@@ -48,6 +46,8 @@ This is a Java 17 rewrite of Claude Code CLI. It runs in two modes: a terminal R
 
 - **CLI:** `com.coderhino.cli.Main` (picocli) — starts REPL via `ReplShell` or web server via `ServerService`
 - **Web:** `com.coderhino.web.CodeRhinoWebApplication` (Spring Boot) — serves REST API + static frontend
+
+Primary backend sources now live in `coderhino-backend/src/main/java/`. The frontend lives in the separate `frontend/` Maven module.
 
 ### Core Data Flow
 
@@ -94,9 +94,9 @@ The web layer uses Spring MVC with SSE streaming:
 - `SessionEventBus` — in-memory event bus connecting query execution to SSE subscribers
 - No database — all persistence is file-based (JSONL sessions, JSON config)
 
-### Frontend (src/main/client/)
+### Frontend (frontend/)
 
-React 18 + TypeScript + Vite. Built during `mvn package` via frontend-maven-plugin, output copied to `target/classes/static/` for Spring Boot to serve. Pages: ChatPage, SessionListPage, ApprovalsPage, SettingsPage.
+React 18 + TypeScript + Vite. Built during the root `mvn package` via the dedicated `frontend` Maven module, with output handed off through `frontend/target/frontend-dist/` and copied into `coderhino-backend/target/classes/static/` for Spring Boot to serve. Pages: ChatPage, SessionListPage, ApprovalsPage, SettingsPage.
 
 - **Context providers:** `MultiProjectContext` manages the multi-project workspace — [detailed docs](docs/context-package.md)
 - **Custom hooks:** 8 hooks for API communication, SSE streaming, and browser interactions — [detailed docs](docs/hooks-package.md)

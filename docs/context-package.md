@@ -1,4 +1,4 @@
-# Frontend Context — `src/main/client/src/context/`
+# Frontend Context — `frontend/src/context/`
 
 React Context providers that share global state across the frontend component tree.
 

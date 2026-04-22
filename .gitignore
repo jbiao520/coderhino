@@ -9,10 +9,11 @@
 /.coderhino/analytics-events.jsonl
 
 # Frontend build artifacts
-src/main/client/node_modules/
-src/main/client/node/
-src/main/client/dist/
-target/classes/static/
+frontend/node_modules/
+frontend/node/
+frontend/dist/
+frontend/target/
+coderhino-backend/target/
 /.coderhino/
 /.playwright-mcp/
 /.opencode/

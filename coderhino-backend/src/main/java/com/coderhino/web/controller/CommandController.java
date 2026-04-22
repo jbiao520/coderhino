@@ -221,7 +221,7 @@ public class CommandController {
         }
 
         ensureLatestVisibleCommand(session, visiblePrompt);
-        var config = new ProviderConfigResolver().resolve(session.getProviderId(), session.getAppState().model());
+        var config = createProviderConfigResolver().resolve(session.getProviderId(), session.getAppState().model());
         var modelClient = createModelClient(config);
         var queryEngine = new QueryEngine(
             toolRegistryForPromptCommand(ToolRegistry.createDefault(), definition),
@@ -244,6 +244,10 @@ public class CommandController {
             config.getApiType(),
             config.getContextWindow()
         );
+    }
+
+    protected ProviderConfigResolver createProviderConfigResolver() {
+        return new ProviderConfigResolver();
     }
 
     private void persistCommandExchange(String sessionId, String prompt, String output) {

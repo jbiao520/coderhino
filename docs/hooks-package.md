@@ -1,6 +1,6 @@
 # Frontend Hooks
 
-Custom React hooks in `src/main/client/src/hooks/`. These hooks encapsulate all API communication, SSE streaming, and browser-level interactions for the frontend. Pages consume these hooks rather than calling the API layer directly.
+Custom React hooks in `frontend/src/hooks/`. These hooks encapsulate all API communication, SSE streaming, and browser-level interactions for the frontend. Pages consume these hooks rather than calling the API layer directly.
 
 > See [Architecture > Frontend](../CLAUDE.md) for the broader frontend context.
 

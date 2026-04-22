@@ -7,10 +7,15 @@
     <groupId>com.coderhino</groupId>
     <artifactId>coderhino</artifactId>
     <version>1.0.0-SNAPSHOT</version>
-    <packaging>jar</packaging>
+    <packaging>pom</packaging>
 
-        <name>Coderhino</name>
+    <name>Coderhino</name>
     <description>CLI tool for AI-assisted coding</description>
+
+    <modules>
+        <module>frontend</module>
+        <module>coderhino-backend</module>
+    </modules>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -20,11 +25,15 @@
         <junit.version>5.10.2</junit.version>
         <mcp.sdk.version>1.1.1</mcp.sdk.version>
         <spring-boot.version>3.2.5</spring-boot.version>
+        <maven.compiler.plugin.version>3.12.1</maven.compiler.plugin.version>
+        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
+        <maven.jar.plugin.version>3.4.1</maven.jar.plugin.version>
+        <maven.resources.plugin.version>3.3.1</maven.resources.plugin.version>
+        <frontend.maven.plugin.version>1.15.0</frontend.maven.plugin.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Spring Boot BOM — manages Jackson, Logback, Jetty 12 (for web), etc. -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -44,7 +53,7 @@
             <!-- Pin WireMock's Jetty 11 artifacts AFTER Spring Boot BOM so these
                  entries override BOM's Jetty 12 for just these artifacts.
                  WireMock 3.3.1 was compiled against Jetty 11; jetty-server 12
-                 changed HttpChannel from class → interface, breaking http2-server.
+                 changed HttpChannel from class -> interface, breaking http2-server.
                  Since spring-boot-starter-web uses Tomcat (not Jetty), pinning
                  all these Jetty artifacts to 11 is safe for the runtime jar. -->
             <dependency>
@@ -125,233 +134,45 @@
         </dependencies>
     </dependencyManagement>
 
-    <dependencies>
-        <!-- Picocli for CLI parsing with @Command annotations -->
-        <dependency>
-            <groupId>info.picocli</groupId>
-            <artifactId>picocli</artifactId>
-            <version>${picocli.version}</version>
-        </dependency>
-
-        <!-- Jackson — versions managed by Spring Boot BOM -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>io.modelcontextprotocol.sdk</groupId>
-            <artifactId>mcp-core</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>io.modelcontextprotocol.sdk</groupId>
-            <artifactId>mcp-json-jackson2</artifactId>
-        </dependency>
-
-        <!-- Spring Boot Web (embedded Tomcat + Spring MVC) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-websocket</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.jetbrains.pty4j</groupId>
-            <artifactId>pty4j</artifactId>
-            <version>0.13.4</version>
-        </dependency>
-
-        <!-- Spring Boot Actuator (health, metrics endpoints) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-
-        <!-- Spring Security — needed to configure CSRF disabled for /api/** -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-
-        <!-- Flexmark HTML to Markdown converter -->
-        <dependency>
-            <groupId>com.vladsch.flexmark</groupId>
-            <artifactId>flexmark-html2md-converter</artifactId>
-            <version>0.64.8</version>
-        </dependency>
-
-        <!-- ===== TEST DEPENDENCIES ===== -->
-
-        <!-- JUnit 5 for testing -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- WireMock for HTTP/SSE mock server (integration tests).
-             Jetty 11 deps (servlet/servlets/webapp) are pinned to 11.0.18 in
-             dependencyManagement above so the Spring Boot BOM does not upgrade
-             them to Jetty 12 where the servlet API moved packages. -->
-        <dependency>
-            <groupId>org.wiremock</groupId>
-            <artifactId>wiremock</artifactId>
-            <version>3.3.1</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Mockito for unit-level mock injection -->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>5.11.0</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Spring Boot Test (MockMvc, etc.) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
     <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.12.1</version>
-                <configuration>
-                    <source>17</source>
-                    <target>17</target>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
-                <configuration>
-                    <!-- PluginSkillCoordinatorTest has 3 pre-existing failures
-                         (stop-reason assertion: "completed" vs "end_turn") that
-                         predate the Spring Boot migration. Excluded so the build
-                         stays green while the underlying issue is tracked separately.
-                         ServerModeLifecycleTest has a pre-existing failure in
-                         startApiModeBecomesRunning: it hardcodes port 8080 and
-                         fails when another @SpringBootTest context has already
-                         occupied that port during the full test suite run. -->
-                    <excludes>
-                        <exclude>**/PluginSkillCoordinatorTest.java</exclude>
-                        <exclude>**/ServerModeLifecycleTest.java</exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <version>3.4.1</version>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>com.coderhino.cli.Main</mainClass>
-                        </manifest>
-                    </archive>
-                </configuration>
-            </plugin>
-            <!-- Spring Boot Maven Plugin — repackages into an executable fat-jar.
-                 maven-shade-plugin has been removed; spring-boot-maven-plugin
-                 replaces it for fat-jar assembly while keeping CLI-first boot. -->
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>${spring-boot.version}</version>
-                <configuration>
-                    <mainClass>com.coderhino.cli.Main</mainClass>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>repackage</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- Frontend build: always runs as part of the default build.
-                 Builds the React/Vite app and copies the output into
-                 target/classes/static so Spring Boot serves it at /.
-                 Node v20 is downloaded on first build; subsequent builds
-                 reuse the cached installation under src/main/client/node. -->
-            <plugin>
-                <groupId>com.github.eirslett</groupId>
-                <artifactId>frontend-maven-plugin</artifactId>
-                <version>1.15.0</version>
-                <configuration>
-                    <workingDirectory>src/main/client</workingDirectory>
-                    <nodeVersion>v20.11.0</nodeVersion>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>install-node-and-npm</id>
-                        <goals>
-                            <goal>install-node-and-npm</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>npm-install</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
-                        <configuration>
-                            <arguments>install</arguments>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>npm-build</id>
-                        <goals>
-                            <goal>npm</goal>
-                        </goals>
-                        <phase>generate-resources</phase>
-                        <configuration>
-                            <arguments>run build</arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-resources-plugin</artifactId>
-                <version>3.3.1</version>
-                <executions>
-                    <execution>
-                        <id>copy-frontend-build</id>
-                        <phase>generate-resources</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${basedir}/target/classes/static</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>src/main/client/dist</directory>
-                                    <filtering>false</filtering>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven.compiler.plugin.version}</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven.surefire.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${maven.jar.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${maven.resources.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>com.github.eirslett</groupId>
+                    <artifactId>frontend-maven-plugin</artifactId>
+                    <version>${frontend.maven.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
     </build>
 
     <profiles>
