@@ -2,9 +2,6 @@ package com.coderhino.commands.builtin;
 
 import com.coderhino.commands.CommandContext;
 import com.coderhino.commands.CommandDefinition;
-import com.coderhino.services.summary.FileChangeSummary;
-import com.coderhino.services.summary.FileChangeSummaryFormatter;
-import com.coderhino.services.summary.SessionEndSummary;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -84,11 +81,10 @@ public final class SummaryCommand implements CommandDefinition {
         renderer.printLine("  Tool uses:  " + state.totalToolUses());
 
         var sessionId = state.sessionRuntime().sessionId();
-        var summaryService = new SessionEndSummary(context.services().fileChangeTracker());
-        var fileSummary = summaryService.buildSummary(sessionId);
-        if (fileSummary.totalChanges() > 0) {
+        var fileSummary = context.services().summary().formatFileChanges(sessionId);
+        if (fileSummary.isPresent()) {
             renderer.printLine("");
-            renderer.printLine(FileChangeSummaryFormatter.format(fileSummary));
+            renderer.printLine(fileSummary.get());
         }
     }
 

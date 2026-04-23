@@ -23,7 +23,7 @@ public final class ClearCommand implements CommandDefinition {
 
     @Override
     public void execute(CommandContext context, String args) {
-        context.services().costTracker().reset();
+        context.services().commandCosts().reset();
         context.bootstrapState().update(state -> state.resetForNewSession());
         context.renderer().printLine("Conversation cleared.");
     }

@@ -30,7 +30,7 @@ public final class CompactCommand implements CommandDefinition {
         }
 
         try {
-            var result = context.services().compact().compactManual(messages, normalizeInstructions(args));
+            var result = context.services().commandCompact().compactManual(messages, normalizeInstructions(args));
             if (!result.wasCompacted()) {
                 if (result.originalMessageCount() == 0 || result.compactedMessages().isEmpty()) {
                     renderer.printLine("No conversation to compact.");

@@ -48,13 +48,20 @@ import com.coderhino.services.memory.LocalTeamMemoryService;
 import com.coderhino.services.memory.NoOpTeamMemoryService;
 import com.coderhino.services.memory.TeamMemoryService;
 import com.coderhino.services.summary.FileChangeTracker;
+import com.coderhino.services.summary.FileChangeSummaryFormatter;
+import com.coderhino.services.summary.SessionEndSummary;
+import com.coderhino.tools.runtime.CommandCompactResult;
+import com.coderhino.tools.runtime.CommandCostService;
+import com.coderhino.tools.runtime.CommandMcpConfigService;
+import com.coderhino.tools.runtime.CommandServices;
+import com.coderhino.tools.runtime.PluginCommandService;
 import com.coderhino.tools.runtime.ToolServices;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-public final class ServiceRegistry implements ToolServices {
+public final class ServiceRegistry implements CommandServices {
     private final McpConnectionManager mcpConnectionManager;
     private final LspClientManager lspClientManager;
     private final TaskService taskService;
@@ -73,6 +80,8 @@ public final class ServiceRegistry implements ToolServices {
     private final SettingsSyncService settingsSyncService;
     private final TeamMemoryService teamMemoryService;
     private final FileChangeTracker fileChangeTracker;
+    private final PluginCommandService pluginCommandService;
+    private final CommandMcpConfigService mcpConfigService;
 
     public ServiceRegistry(McpConnectionManager mcpConnectionManager, LspClientManager lspClientManager, TaskService taskService) {
         this(mcpConnectionManager, lspClientManager, taskService, new CostTracker());
@@ -129,6 +138,8 @@ public final class ServiceRegistry implements ToolServices {
         this.settingsSyncService = settingsSyncService;
         this.teamMemoryService = teamMemoryService;
         this.fileChangeTracker = fileChangeTracker;
+        this.pluginCommandService = new CommandPluginServiceAdapter(pluginService, skillService, mcpConnectionManager, lspClientManager);
+        this.mcpConfigService = new com.coderhino.services.config.McpConfigWriter();
     }
 
     public static ServiceRegistry createDefault() {
@@ -216,12 +227,41 @@ public final class ServiceRegistry implements ToolServices {
         return taskService;
     }
 
+    @Override
+    public CommandCostService commandCosts() {
+        return new CommandCostService() {
+            @Override
+            public void reset() {
+                costTracker.reset();
+            }
+
+            @Override
+            public Map<String, CommandCostService.ModelUsage> allModelUsage() {
+                return costTracker.allModelUsage().entrySet().stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> new CommandCostService.ModelUsage(
+                            entry.getValue().inputTokens(),
+                            entry.getValue().outputTokens(),
+                            entry.getValue().costUsd()
+                        ),
+                        (left, right) -> right,
+                        java.util.LinkedHashMap::new
+                    ));
+            }
+        };
+    }
+
     public CostTracker costTracker() {
         return costTracker;
     }
 
-    public CompactService compact() {
-        return compactService;
+    @Override
+    public com.coderhino.tools.runtime.CommandCompactService commandCompact() {
+        return (messages, customInstructions) -> {
+            var result = compactService.compactManual(messages, customInstructions);
+            return new CommandCompactResult(result.compactedMessages(), result.originalMessageCount(), result.wasCompacted());
+        };
     }
 
     public AnalyticsService analytics() {
@@ -233,8 +273,18 @@ public final class ServiceRegistry implements ToolServices {
         return featureFlagService;
     }
 
+    @Override
+    public com.coderhino.tools.runtime.CommandServerService commandServer() {
+        return serverService::isRunning;
+    }
+
     public ServerService serverService() {
         return serverService;
+    }
+
+    @Override
+    public PluginCommandService commandPlugins() {
+        return pluginCommandService;
     }
 
     public PluginService pluginService() {
@@ -245,8 +295,19 @@ public final class ServiceRegistry implements ToolServices {
         return skillService;
     }
 
-    public CoordinatorService coordinatorService() {
-        return coordinatorService;
+    @Override
+    public com.coderhino.tools.runtime.CommandCoordinatorService commandCoordinator() {
+        return new com.coderhino.tools.runtime.CommandCoordinatorService() {
+            @Override
+            public String currentMode() {
+                return coordinatorService.currentMode().name();
+            }
+
+            @Override
+            public boolean isMultiAgent() {
+                return coordinatorService.isMultiAgent();
+            }
+        };
     }
 
     public ProactiveService proactiveService() {
@@ -263,8 +324,29 @@ public final class ServiceRegistry implements ToolServices {
         return remoteTriggerService;
     }
 
-    public VoiceService voiceService() {
-        return voiceService;
+    @Override
+    public com.coderhino.tools.runtime.CommandVoiceService commandVoice() {
+        return new com.coderhino.tools.runtime.CommandVoiceService() {
+            @Override
+            public void enable() {
+                voiceService.enable();
+            }
+
+            @Override
+            public void disable() {
+                voiceService.disable();
+            }
+
+            @Override
+            public boolean isEnabled() {
+                return voiceService.isEnabled();
+            }
+
+            @Override
+            public String currentMode() {
+                return voiceService.currentMode().name();
+            }
+        };
     }
 
     public SettingsSyncService settingsSyncService() {
@@ -277,5 +359,20 @@ public final class ServiceRegistry implements ToolServices {
 
     public FileChangeTracker fileChangeTracker() {
         return fileChangeTracker;
+    }
+
+    @Override
+    public com.coderhino.tools.runtime.CommandSummaryService summary() {
+        return sessionId -> {
+            var summary = new SessionEndSummary(fileChangeTracker).buildSummary(sessionId);
+            return summary.totalChanges() > 0
+                ? java.util.Optional.of(FileChangeSummaryFormatter.format(summary))
+                : java.util.Optional.empty();
+        };
+    }
+
+    @Override
+    public CommandMcpConfigService mcpConfig() {
+        return mcpConfigService;
     }
 }

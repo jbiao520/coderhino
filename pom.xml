@@ -15,6 +15,7 @@
     <modules>
         <module>frontend</module>
         <module>coderhino-tools</module>
+        <module>coderhino-commands</module>
         <module>coderhino-backend</module>
     </modules>
 

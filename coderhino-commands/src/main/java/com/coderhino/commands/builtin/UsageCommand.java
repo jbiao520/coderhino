@@ -51,7 +51,7 @@ public final class UsageCommand implements CommandDefinition {
         renderer.printLine("  Transcript entries:  " + state.sessionRuntime().transcript().size());
 
         // Per-model cost breakdown from CostTracker
-        var tracker = context.services().costTracker();
+        var tracker = context.services().commandCosts();
         var modelUsage = tracker.allModelUsage();
         if (!modelUsage.isEmpty()) {
             renderer.printLine("");

@@ -44,6 +44,6 @@ public final class StatusCommand implements CommandDefinition {
         renderer.printLine("Services:");
         renderer.printLine("  MCP servers:      " + context.services().mcp().definitions().size());
         renderer.printLine("  LSP servers:      " + context.services().lsp().definitions().size());
-        renderer.printLine("  Server running:   " + context.services().serverService().isRunning());
+        renderer.printLine("  Server running:   " + context.services().commandServer().isRunning());
     }
 }

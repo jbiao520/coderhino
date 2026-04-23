@@ -2,7 +2,6 @@ package com.coderhino.commands.builtin;
 
 import com.coderhino.commands.CommandContext;
 import com.coderhino.commands.CommandDefinition;
-import com.coderhino.services.config.McpConfigWriter;
 import com.coderhino.services.mcp.McpServerDefinition;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -12,7 +11,6 @@ import java.util.Map;
 
 public final class McpCommand implements CommandDefinition {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final McpConfigWriter CONFIG_WRITER = new McpConfigWriter();
 
     @Override
     public String name() {
@@ -74,7 +72,7 @@ public final class McpCommand implements CommandDefinition {
                 return;
             }
             try {
-                CONFIG_WRITER.setServerEnabled(Path.of(context.bootstrapState().get().cwd()), serverName, true);
+                context.services().mcpConfig().setServerEnabled(Path.of(context.bootstrapState().get().cwd()), serverName, true);
             } catch (Exception exception) {
                 context.err().printf("Failed to persist MCP server state: %s%n", exception.getMessage());
                 return;
@@ -94,7 +92,7 @@ public final class McpCommand implements CommandDefinition {
                 return;
             }
             try {
-                CONFIG_WRITER.setServerEnabled(Path.of(context.bootstrapState().get().cwd()), serverName, false);
+                context.services().mcpConfig().setServerEnabled(Path.of(context.bootstrapState().get().cwd()), serverName, false);
             } catch (Exception exception) {
                 context.err().printf("Failed to persist MCP server state: %s%n", exception.getMessage());
                 return;
@@ -123,7 +121,7 @@ public final class McpCommand implements CommandDefinition {
             );
             try {
                 var cwd = Path.of(context.bootstrapState().get().cwd());
-                CONFIG_WRITER.addServer(cwd, definition);
+                context.services().mcpConfig().addServer(cwd, definition);
                 context.services().mcp().register(definition);
                 context.out().printf("Added MCP server %s to %s%n", definition.name(), cwd.resolve(".mcp.json"));
             } catch (Exception exception) {

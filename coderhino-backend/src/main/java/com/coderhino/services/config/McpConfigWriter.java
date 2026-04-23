@@ -1,6 +1,7 @@
 package com.coderhino.services.config;
 
 import com.coderhino.services.mcp.McpServerDefinition;
+import com.coderhino.tools.runtime.CommandMcpConfigService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -9,9 +10,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public final class McpConfigWriter {
+public final class McpConfigWriter implements CommandMcpConfigService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Override
     public void addServer(Path cwd, McpServerDefinition definition) throws IOException {
         var root = loadRoot(cwd);
         var serversNode = getServersNode(root);
@@ -20,6 +22,7 @@ public final class McpConfigWriter {
         writeRoot(cwd, root);
     }
 
+    @Override
     public void setServerEnabled(Path cwd, String serverName, boolean enabled) throws IOException {
         var root = loadRoot(cwd);
         var serversNode = getServersNode(root);

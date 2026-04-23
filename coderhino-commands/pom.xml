@@ -11,27 +11,22 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>coderhino-tools</artifactId>
+    <artifactId>coderhino-commands</artifactId>
     <packaging>jar</packaging>
 
-    <name>Coderhino Tools</name>
-    <description>Shared tool contracts and runtime types for Coderhino</description>
+    <name>Coderhino Commands</name>
+    <description>Shared slash command contracts and implementations for Coderhino</description>
 
     <dependencies>
         <dependency>
+            <groupId>com.coderhino</groupId>
+            <artifactId>coderhino-tools</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.vladsch.flexmark</groupId>
-            <artifactId>flexmark-html2md-converter</artifactId>
-            <version>0.64.8</version>
         </dependency>
     </dependencies>
 

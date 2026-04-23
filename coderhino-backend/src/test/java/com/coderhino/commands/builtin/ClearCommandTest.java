@@ -3,6 +3,7 @@ package com.coderhino.commands.builtin;
 import com.coderhino.commands.CommandContext;
 import com.coderhino.commands.CommandRegistry;
 import com.coderhino.commands.PromptCommandExecutor;
+import com.coderhino.cli.PrintStreamTerminalRenderer;
 import com.coderhino.services.CostTracker;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.services.lsp.LspClientManager;
@@ -155,6 +156,7 @@ class ClearCommandTest {
             new SessionStore(new ObjectMapper().registerModule(new JavaTimeModule()), tempDir.resolve("sessions")),
             new ServiceRegistry(new McpConnectionManager(), new LspClientManager(), new TaskService(tempDir.resolve("tasks.json")), costTracker),
             noPromptExecutor(),
+            new PrintStreamTerminalRenderer(new PrintStream(outBuffer, true), new PrintStream(new ByteArrayOutputStream(), true)),
             new PrintStream(outBuffer, true),
             new PrintStream(new ByteArrayOutputStream(), true)
         );
@@ -167,6 +169,7 @@ class ClearCommandTest {
             original.sessionStore(),
             original.services(),
             original.promptExecutor(),
+            new PrintStreamTerminalRenderer(new PrintStream(outBuffer, true), original.err()),
             new PrintStream(outBuffer, true),
             original.err()
         );

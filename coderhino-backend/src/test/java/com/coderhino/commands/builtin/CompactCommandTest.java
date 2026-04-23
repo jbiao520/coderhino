@@ -3,6 +3,7 @@ package com.coderhino.commands.builtin;
 import com.coderhino.commands.CommandContext;
 import com.coderhino.commands.CommandRegistry;
 import com.coderhino.commands.PromptCommandExecutor;
+import com.coderhino.cli.PrintStreamTerminalRenderer;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.services.compact.CompactService;
 import com.coderhino.services.lsp.LspClientManager;
@@ -96,6 +97,7 @@ class CompactCommandTest {
             new SessionStore(new ObjectMapper().registerModule(new JavaTimeModule()), tempDir.resolve("sessions")),
             new ServiceRegistry(new McpConnectionManager(), new LspClientManager(), new TaskService(tempDir.resolve("tasks.json")), new com.coderhino.services.CostTracker(), compactService),
             noPromptExecutor(),
+            new PrintStreamTerminalRenderer(new PrintStream(outBuffer, true), new PrintStream(new ByteArrayOutputStream(), true)),
             new PrintStream(outBuffer, true),
             new PrintStream(new ByteArrayOutputStream(), true)
         );

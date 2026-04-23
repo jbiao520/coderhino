@@ -32,6 +32,12 @@
             <version>${project.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.coderhino</groupId>
+            <artifactId>coderhino-commands</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Picocli for CLI parsing with @Command annotations -->
         <dependency>
             <groupId>info.picocli</groupId>

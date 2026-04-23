@@ -142,7 +142,16 @@ public final class ReplShell {
             return;
         }
 
-        var context = new CommandContext(bootstrapState, commandRegistry, sessionStore, serviceRegistry, this::executePromptCommand, commandOut, commandErr);
+        var context = new CommandContext(
+            bootstrapState,
+            commandRegistry,
+            sessionStore,
+            serviceRegistry,
+            this::executePromptCommand,
+            renderer,
+            commandOut,
+            commandErr
+        );
         command.get().execute(context, args);
     }
 

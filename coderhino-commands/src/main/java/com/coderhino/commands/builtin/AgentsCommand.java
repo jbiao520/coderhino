@@ -17,7 +17,7 @@ public final class AgentsCommand implements CommandDefinition {
     @Override
     public void execute(CommandContext context, String args) {
         var renderer = context.renderer();
-        var coordinator = context.services().coordinatorService();
+        var coordinator = context.services().commandCoordinator();
         var sub = args == null ? "" : args.trim();
 
         if (sub.isEmpty() || sub.equals("status")) {

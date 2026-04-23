@@ -1,9 +1,9 @@
 package com.coderhino.state;
 
 import com.coderhino.types.Message;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.fasterxml.jackson.core.type.TypeReference;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

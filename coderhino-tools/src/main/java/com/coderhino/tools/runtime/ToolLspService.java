@@ -1,12 +1,28 @@
 package com.coderhino.tools.runtime;
 
+import com.coderhino.services.lsp.LspConnection;
 import com.coderhino.services.lsp.LspLocationDescriptor;
+import com.coderhino.services.lsp.LspServerDefinition;
 import com.coderhino.services.lsp.LspSymbolDescriptor;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface ToolLspService {
+    List<LspServerDefinition> definitions();
+
+    Optional<LspServerDefinition> find(String language);
+
+    List<LspConnection> connections();
+
+    void register(LspServerDefinition definition);
+
+    void unregister(String language);
+
+    Optional<LspConnection> start(String language);
+
+    Optional<LspConnection> disconnect(String language);
+
     Optional<List<LspSymbolDescriptor>> workspaceSymbols(String language, String query);
 
     Optional<List<LspSymbolDescriptor>> documentSymbols(String language, String uri);

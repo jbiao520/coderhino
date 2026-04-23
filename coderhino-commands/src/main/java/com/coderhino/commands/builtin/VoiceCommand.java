@@ -2,7 +2,6 @@ package com.coderhino.commands.builtin;
 
 import com.coderhino.commands.CommandContext;
 import com.coderhino.commands.CommandDefinition;
-import com.coderhino.services.voice.VoiceService;
 
 public final class VoiceCommand implements CommandDefinition {
 
@@ -25,7 +24,7 @@ public final class VoiceCommand implements CommandDefinition {
     public void execute(CommandContext context, String args) {
         var renderer = context.renderer();
         var sub = args == null ? "" : args.trim();
-        var voice = context.services().voiceService();
+        var voice = context.services().commandVoice();
 
         if (sub.isEmpty() || sub.equals("status")) {
             renderer.printLine("Voice mode: " + (voice.isEnabled() ? "ENABLED" : "DISABLED"));

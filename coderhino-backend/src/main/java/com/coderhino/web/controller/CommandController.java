@@ -5,6 +5,7 @@ import com.coderhino.commands.CommandDefinition;
 import com.coderhino.commands.CommandRegistry;
 import com.coderhino.commands.MarkdownCommandDefinition;
 import com.coderhino.commands.PromptBackedCommand;
+import com.coderhino.cli.PrintStreamTerminalRenderer;
 import com.coderhino.query.ModelClient;
 import com.coderhino.query.ModelClientFactory;
 import com.coderhino.query.QueryEngine;
@@ -133,8 +134,16 @@ public class CommandController {
 
         try (var out = new PrintStream(stdout, true, StandardCharsets.UTF_8);
              var err = new PrintStream(stderr, true, StandardCharsets.UTF_8)) {
-            var context = new CommandContext(targetState, commandRegistry, sessionStore, serviceRegistry,
-                (commandContext, commandDefinition, promptText) -> executePromptCommand(commandDefinition, promptText, prompt, request.sessionId()), out, err);
+            var context = new CommandContext(
+                targetState,
+                commandRegistry,
+                sessionStore,
+                serviceRegistry,
+                (commandContext, commandDefinition, promptText) -> executePromptCommand(commandDefinition, promptText, prompt, request.sessionId()),
+                new PrintStreamTerminalRenderer(out, err),
+                out,
+                err
+            );
             definition.execute(context, String.join(" ", args));
             var response = new CommandExecuteResponse(prompt, combineOutput(stdout, stderr, null), true, definition.name());
             if (!(definition instanceof PromptBackedCommand)) {
