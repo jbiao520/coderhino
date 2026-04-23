@@ -1,6 +1,5 @@
 package com.coderhino.server;
 
-import com.coderhino.web.CodeRhinoWebApplication;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.boot.web.server.PortInUseException;
@@ -15,6 +14,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class LocalServerService implements ServerService {
+
+    private static final String WEB_APPLICATION_CLASS = "com.coderhino.web.CodeRhinoWebApplication";
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicReference<ServerMode> currentMode = new AtomicReference<>();
@@ -53,7 +54,7 @@ public final class LocalServerService implements ServerService {
 
         executor.submit(() -> {
             try {
-                SpringApplication app = new SpringApplication(CodeRhinoWebApplication.class);
+                SpringApplication app = new SpringApplication(resolveWebApplicationClass());
                 app.addListeners((ApplicationReadyEvent event) -> {
                     springContext.set(event.getApplicationContext());
                     ready.countDown();
@@ -94,6 +95,17 @@ public final class LocalServerService implements ServerService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting for Spring Boot to start", e);
+        }
+    }
+
+    private Class<?> resolveWebApplicationClass() {
+        try {
+            return Class.forName(WEB_APPLICATION_CLASS);
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(
+                "Web runtime module is not available on the classpath: " + WEB_APPLICATION_CLASS,
+                e
+            );
         }
     }
 
