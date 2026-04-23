@@ -19,3 +19,4 @@ coderhino-backend/target/
 /.opencode/
 /openspec/changes/
 /coderhino-tools/target/
+/**/target/
