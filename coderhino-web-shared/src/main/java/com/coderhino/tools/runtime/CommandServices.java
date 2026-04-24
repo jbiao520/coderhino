@@ -1,6 +1,6 @@
 package com.coderhino.tools.runtime;
 
-public interface CommandServices extends ToolServices {
+public interface CommandServices {
     CommandCostService commandCosts();
 
     CommandCompactService commandCompact();
@@ -16,4 +16,10 @@ public interface CommandServices extends ToolServices {
     CommandVoiceService commandVoice();
 
     CommandSummaryService summary();
+
+    ToolMcpService mcp();
+
+    ToolLspService lsp();
+
+    ToolTaskService tasks();
 }

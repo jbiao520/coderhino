@@ -61,7 +61,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-public final class ServiceRegistry implements CommandServices {
+public final class ServiceRegistry implements CommandServices, ToolServices {
     private final McpConnectionManager mcpConnectionManager;
     private final LspClientManager lspClientManager;
     private final TaskService taskService;

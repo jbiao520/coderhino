@@ -20,3 +20,6 @@ coderhino-backend/target/
 /openspec/changes/
 /coderhino-tools/target/
 /**/target/
+/*/.settings/*
+/*/.classpath
+/*/.project

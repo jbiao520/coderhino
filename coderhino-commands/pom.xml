@@ -20,7 +20,7 @@
     <dependencies>
         <dependency>
             <groupId>com.coderhino</groupId>
-            <artifactId>coderhino-tools</artifactId>
+            <artifactId>coderhino-web-shared</artifactId>
             <version>${project.version}</version>
         </dependency>
 
