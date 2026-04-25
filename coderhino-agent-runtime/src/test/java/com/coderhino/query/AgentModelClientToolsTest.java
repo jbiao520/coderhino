@@ -119,20 +119,85 @@ class AgentModelClientToolsTest {
     }
 
     @Test
-    void buildPayloadUsesConfiguredContextWindow() {
+    void buildPayloadUsesConfiguredMaxOutputTokens() {
         var configuredClient = new AgentModelClient(
             HttpClient.newHttpClient(),
             new ObjectMapper(),
             "https://api.anthropic.com",
             "test-key",
             "claude-3-sonnet",
-            64000L
+            ProviderApiType.CLAUDE_CODE,
+            128000L,
+            4096L
         );
         var request = new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null);
 
         var payload = configuredClient.buildPayload(request, false);
 
-        assertEquals(64000L, payload.get("max_tokens"));
+        assertEquals(4096L, payload.get("max_tokens"));
+    }
+
+    @Test
+    void configuredContextWindowDoesNotBecomeMaxOutputTokens() {
+        var configuredClient = new AgentModelClient(
+            HttpClient.newHttpClient(),
+            new ObjectMapper(),
+            "https://api.anthropic.com",
+            "test-key",
+            "claude-3-sonnet",
+            ProviderApiType.CLAUDE_CODE,
+            64000L,
+            2048L
+        );
+        var request = new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null);
+
+        var payload = configuredClient.buildPayload(request, false);
+
+        assertEquals(2048L, payload.get("max_tokens"));
+        assertFalse(payload.containsValue(64000L));
+    }
+
+    @Test
+    void modelClientFactoryRejectsOpenAiProvider() {
+        var exception = assertThrows(IllegalArgumentException.class, () -> ModelClientFactory.create(
+            "model",
+            "key",
+            "https://api.openai.com",
+            ProviderApiType.OPENAI
+        ));
+
+        assertTrue(exception.getMessage().contains("OpenAI-compatible requests are not supported in this release"));
+    }
+
+    @Test
+    void modelClientFactoryRejectsMissingCredentials() {
+        var exception = assertThrows(IllegalStateException.class, () -> ModelClientFactory.create(
+            "model",
+            "",
+            "https://api.anthropic.com",
+            ProviderApiType.CLAUDE_CODE
+        ));
+
+        assertTrue(exception.getMessage().contains("Model API credentials are required"));
+    }
+
+    @Test
+    void terminalHttpFailureReturnsStructuredModelError() {
+        var http = new FakeHttpClient();
+        http.enqueueResponse(new FakeHttpResponse<>(400, Stream.of("bad request")));
+        var configuredClient = new AgentModelClient(
+            http,
+            new ObjectMapper(),
+            "https://api.anthropic.com",
+            "test-key",
+            "claude-3-sonnet"
+        );
+        var request = new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null);
+
+        var response = configuredClient.complete(newBootstrapState(), request);
+
+        var error = assertInstanceOf(ModelResponse.ModelError.class, response);
+        assertTrue(error.message().contains("Anthropic API error (400): bad request"));
     }
 
     @Test
@@ -252,7 +317,7 @@ class AgentModelClientToolsTest {
 
             var response = loggingClient.complete(newBootstrapState(), new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null));
 
-            assertTrue(response instanceof ModelResponse.AssistantReply reply && reply.text().contains("Anthropic request failed: boom-5 overloaded_error"));
+            assertTrue(response instanceof ModelResponse.ModelError error && error.message().contains("Anthropic request failed: boom-5 overloaded_error"));
             assertTrue(appender.list.stream().anyMatch(event -> event.getFormattedMessage().contains("Anthropic request attempt 1 of 5 failed. Retrying.")));
             assertTrue(appender.list.stream().anyMatch(event -> event.getFormattedMessage().contains("Anthropic request failed after 5 attempts")
                 && event.getThrowableProxy() != null));
@@ -344,7 +409,7 @@ class AgentModelClientToolsTest {
 
         var response = loggingClient.complete(newBootstrapState(), new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null), streamEvents);
 
-        assertTrue(response instanceof ModelResponse.AssistantReply reply && reply.text().contains("Anthropic API error (529)"));
+        assertTrue(response instanceof ModelResponse.ModelError error && error.message().contains("Anthropic API error (529)"));
         assertEquals(4, streamEvents.statuses.size());
         assertEquals("Retrying LLM request: attempt 5 of 5 after service overloaded", streamEvents.statuses.get(3));
     }
@@ -408,7 +473,7 @@ class AgentModelClientToolsTest {
             streamEvents
         );
 
-        assertTrue(response instanceof ModelResponse.AssistantReply reply && reply.text().contains("Anthropic request failed: request timed out"));
+        assertTrue(response instanceof ModelResponse.ModelError error && error.message().contains("Anthropic request failed: request timed out"));
         assertEquals(4, streamEvents.statuses.size());
         assertEquals("Retrying LLM request: attempt 5 of 5 after transient request failure", streamEvents.statuses.get(3));
     }

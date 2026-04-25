@@ -37,3 +37,25 @@ The shared query execution contract SHALL support model clients that emit no int
 #### Scenario: Streaming parse failure falls back to terminal behavior
 - **WHEN** the streaming Agent parse path fails and the client falls back to the existing non-streaming request path
 - **THEN** the query pipeline SHALL still produce the same terminal assistant reply or tool request behavior even if intermediate model stream events are incomplete or absent
+
+### Requirement: Query stream event sink is part of embeddable runtime API
+The streaming query event sink contract SHALL be available from the embeddable agent runtime module so external applications can observe text deltas, thinking deltas, tool progress, usage, errors, and completion events without depending on backend or web modules.
+
+#### Scenario: External app observes runtime events
+- **WHEN** an external application provides a query event sink to the embeddable runtime facade
+- **THEN** the runtime SHALL forward ordered query events to that sink using the same event semantics as the existing query pipeline
+
+#### Scenario: App without streaming remains compatible
+- **WHEN** an external application invokes the runtime without providing a custom event sink
+- **THEN** execution SHALL still complete and return the final result without requiring event callbacks
+
+### Requirement: Interactive user questions remain host-mediated
+The embeddable runtime SHALL allow host applications to mediate interactive user-question events through the runtime event sink or equivalent callback.
+
+#### Scenario: Host answers interactive question
+- **WHEN** the model requests an interactive user question tool during embedded execution and the host callback returns an answer
+- **THEN** the runtime SHALL send that answer back as the tool result and continue the agent loop
+
+#### Scenario: Host does not answer interactive question
+- **WHEN** the model requests an interactive user question tool during embedded execution and no host answer is available
+- **THEN** the runtime SHALL handle the absence according to existing query event sink semantics without requiring backend or web approval infrastructure

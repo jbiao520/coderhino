@@ -22,6 +22,7 @@ public class CoderhinoAgentProperties {
     private String apiBaseUrl = "https://api.anthropic.com";
     private ProviderApiType providerApiType = ProviderApiType.CLAUDE_CODE;
     private long contextWindow = 128000L;
+    private long maxOutputTokens = 128000L;
 
     public String getModel() {
         return model;
@@ -137,12 +138,23 @@ public class CoderhinoAgentProperties {
         this.contextWindow = contextWindow;
     }
 
+    public long getMaxOutputTokens() {
+        return maxOutputTokens;
+    }
+
+    public void setMaxOutputTokens(long maxOutputTokens) {
+        this.maxOutputTokens = maxOutputTokens;
+    }
+
     public enum ProviderApiType {
         CLAUDE_CODE,
         OPENAI;
 
         com.coderhino.query.ProviderApiType toRuntimeType() {
-            return this == OPENAI ? com.coderhino.query.ProviderApiType.OPENAI : com.coderhino.query.ProviderApiType.CLAUDE_CODE;
+            if (this == OPENAI) {
+                throw com.coderhino.query.ProviderApiType.unsupportedOpenAi();
+            }
+            return com.coderhino.query.ProviderApiType.CLAUDE_CODE;
         }
     }
 }

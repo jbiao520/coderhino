@@ -50,3 +50,25 @@ The system SHALL provide a `ToolSchema` record in `com.coderhino.query` with fie
 #### Scenario: QueryRequest includes registry tools
 - **WHEN** `QueryEngine.execute()` is called with a BootstrapState and user input
 - **THEN** the resulting QueryRequest passed to `ToolLoopOrchestrator.run()` SHALL contain tool schemas derived from the QueryEngine's ToolRegistry
+
+### Requirement: Embedded runtime publishes schemas for caller-selected tools
+The embeddable runtime SHALL derive model tool schemas from the caller-selected tool registry, including enabled built-in tools, dynamic MCP tools when configured, and custom host tools.
+
+#### Scenario: Filtered registry limits schema publication
+- **WHEN** an embedded runtime is configured with a filtered tool registry
+- **THEN** model requests SHALL include schemas only for enabled tools in that filtered registry plus explicitly configured dynamic tools
+
+#### Scenario: Custom host tool schema is included
+- **WHEN** an embedded runtime is configured with a custom host tool definition
+- **THEN** the model tool schema list SHALL include that custom tool's name, description, and input schema
+
+### Requirement: Embedded runtime executes only configured tools
+The embeddable runtime SHALL reject or report model tool calls that are not present in the configured tool registry or explicitly configured dynamic tool providers.
+
+#### Scenario: Model requests unconfigured tool
+- **WHEN** the model requests a tool that the embedded runtime did not configure
+- **THEN** the runtime SHALL return an unknown-tool error result through the existing tool-result/error semantics instead of executing an unintended tool
+
+#### Scenario: Model requests configured tool
+- **WHEN** the model requests a tool present in the configured registry and permissions allow execution
+- **THEN** the runtime SHALL execute that tool using the configured tool context and return its result to the model loop

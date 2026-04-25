@@ -163,6 +163,17 @@ final class ToolLoopOrchestrator {
             usageAccumulator.applyToState(bootstrapState);
             sink.onUsage(usageAccumulator.total().inputTokens(), usageAccumulator.total().outputTokens(), usageAccumulator.total().cacheCreationTokens(), usageAccumulator.total().cacheReadTokens());
 
+            if (response instanceof ModelResponse.ModelError modelError) {
+                log.error(
+                    "Model completion returned error for session {} at iteration {} error={}",
+                    sessionId,
+                    iterationNumber,
+                    modelError.message()
+                );
+                sink.onError(modelError.message());
+                return stopReasonResolver.resolveError(modelError.message(), iterationNumber, usageAccumulator.total());
+            }
+
             if (budgetEnforcer.isBudgetExceeded(usageAccumulator)) {
                 log.info(
                     "Query budget exceeded for session {} at iteration {} usage={}",

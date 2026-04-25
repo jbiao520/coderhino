@@ -37,6 +37,8 @@ final class UsageAccumulator {
             add(assistantReply.usage());
         } else if (response instanceof ModelResponse.ToolRequest toolRequest) {
             add(toolRequest.usage());
+        } else if (response instanceof ModelResponse.ModelError modelError) {
+            add(modelError.usage());
         }
     }
 

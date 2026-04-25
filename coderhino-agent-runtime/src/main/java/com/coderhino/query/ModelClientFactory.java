@@ -8,7 +8,8 @@ import java.util.Optional;
 
 public final class ModelClientFactory {
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
-    private static final long DEFAULT_CONTEXT_WINDOW = 128000L;
+    public static final long DEFAULT_CONTEXT_WINDOW = 128000L;
+    public static final long DEFAULT_MAX_OUTPUT_TOKENS = 128000L;
 
     private ModelClientFactory() {
     }
@@ -19,21 +20,29 @@ public final class ModelClientFactory {
             System.getenv("ANTHROPIC_API_KEY"),
             Optional.ofNullable(System.getenv("ANTHROPIC_BASE_URL")).orElse("https://api.anthropic.com"),
             ProviderApiType.CLAUDE_CODE,
-            DEFAULT_CONTEXT_WINDOW
+            DEFAULT_CONTEXT_WINDOW,
+            DEFAULT_MAX_OUTPUT_TOKENS
         );
     }
 
     public static ModelClient create(String model, String apiKey, String baseUrl) {
-        return create(model, apiKey, baseUrl, ProviderApiType.CLAUDE_CODE, DEFAULT_CONTEXT_WINDOW);
+        return create(model, apiKey, baseUrl, ProviderApiType.CLAUDE_CODE, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS);
     }
 
     public static ModelClient create(String model, String apiKey, String baseUrl, ProviderApiType apiType) {
-        return create(model, apiKey, baseUrl, apiType, DEFAULT_CONTEXT_WINDOW);
+        return create(model, apiKey, baseUrl, apiType, DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS);
     }
 
     public static ModelClient create(String model, String apiKey, String baseUrl, ProviderApiType apiType, long contextWindow) {
+        return create(model, apiKey, baseUrl, apiType, contextWindow, DEFAULT_MAX_OUTPUT_TOKENS);
+    }
+
+    public static ModelClient create(String model, String apiKey, String baseUrl, ProviderApiType apiType, long contextWindow, long maxOutputTokens) {
+        if (apiType == ProviderApiType.OPENAI) {
+            throw ProviderApiType.unsupportedOpenAi();
+        }
         if (apiKey == null || apiKey.isBlank()) {
-            return new LocalEchoModelClient();
+            throw new IllegalStateException("Model API credentials are required. Set ANTHROPIC_API_KEY or inject a custom ModelClient for local/test behavior.");
         }
 
         return new AgentModelClient(
@@ -43,7 +52,8 @@ public final class ModelClientFactory {
             apiKey,
             model,
             apiType,
-            contextWindow
+            contextWindow,
+            maxOutputTokens
         );
     }
 }

@@ -27,7 +27,7 @@ public class CoderhinoAgentAutoConfiguration {
     @ConditionalOnMissingBean
     public ToolRegistry coderhinoToolRegistry(CoderhinoAgentProperties properties) {
         if (properties.getEnabledTools().isEmpty()) {
-            return ToolRegistry.createReadOnlyDefault();
+            return ToolRegistry.createEmbeddedDefault();
         }
         return ToolRegistry.createDefault().filtered(properties.getEnabledTools());
     }
@@ -46,7 +46,8 @@ public class CoderhinoAgentAutoConfiguration {
             properties.getApiKey(),
             properties.getApiBaseUrl(),
             properties.getProviderApiType().toRuntimeType(),
-            properties.getContextWindow()
+            properties.getContextWindow(),
+            properties.getMaxOutputTokens()
         );
     }
 
@@ -71,6 +72,7 @@ public class CoderhinoAgentAutoConfiguration {
             .customSystemPrompt(properties.getCustomSystemPrompt())
             .appendSystemPrompt(properties.getAppendSystemPrompt())
             .maxToolIterations(properties.getMaxToolIterations())
+            .maxOutputTokens(properties.getMaxOutputTokens())
             .maxBudgetUsd(properties.getMaxBudgetUsd());
 
         var sink = eventSink.getIfAvailable();

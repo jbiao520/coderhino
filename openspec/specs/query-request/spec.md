@@ -105,3 +105,25 @@ The shared query execution path SHALL support a current turn whose persisted vis
 - **WHEN** query execution is invoked with a visible persisted user message such as `/fix bug` and a distinct raw current-turn input expanded from that command
 - **THEN** `BootstrapState` SHALL persist only the visible user message for that turn
 - **THEN** `QueryRequest.messages()` SHALL contain exactly one current-turn `UserMessage` for the raw expanded input instead of appending both visible and raw forms
+
+### Requirement: Query request contracts are owned by embeddable runtime boundary
+The query request and model client contracts SHALL be available from the embeddable agent runtime module so external callers can implement custom model clients without depending on backend or web application modules.
+
+#### Scenario: External custom model client compiles against runtime
+- **WHEN** an external application implements the model client contract using the embeddable runtime dependency
+- **THEN** the implementation SHALL compile without requiring `coderhino-backend` or `coderhino-web` as dependencies
+
+#### Scenario: Existing query request fields remain available
+- **WHEN** code constructs a query request through the runtime-owned contract
+- **THEN** conversation messages, system prompt, custom prompt, append prompt, and tool schema fields SHALL remain available with existing semantics
+
+### Requirement: Runtime facade preserves query request semantics
+The public agent runtime facade SHALL execute through query requests that preserve existing prompt, history, visible input, raw input, and tool schema semantics.
+
+#### Scenario: Facade creates request with tools
+- **WHEN** a runtime facade executes a turn with an enabled tool registry
+- **THEN** the query request sent to the model client SHALL include tool schemas derived from that registry according to existing ordering and enabled-tool rules
+
+#### Scenario: Facade handles visible and raw inputs
+- **WHEN** a runtime facade supports a caller path with distinct visible and raw current-turn input
+- **THEN** persisted state and outgoing query request history SHALL follow existing visible-versus-raw current-turn semantics

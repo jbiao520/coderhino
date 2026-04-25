@@ -117,6 +117,10 @@ public final class ToolRegistry {
         return createDefault().readOnly();
     }
 
+    public static ToolRegistry createEmbeddedDefault() {
+        return createDefault().filtered(List.of("read_file", "glob", "grep"));
+    }
+
     public Optional<ToolDefinition<?, ?>> find(String name) {
         return Optional.ofNullable(tools.get(name));
     }
@@ -126,8 +130,11 @@ public final class ToolRegistry {
     }
 
     public ToolRegistry filtered(List<String> allowedToolNames) {
-        if (allowedToolNames == null || allowedToolNames.isEmpty()) {
+        if (allowedToolNames == null) {
             return this;
+        }
+        if (allowedToolNames.isEmpty()) {
+            return new ToolRegistry(List.of());
         }
 
         Set<String> allowed = new LinkedHashSet<>(allowedToolNames);

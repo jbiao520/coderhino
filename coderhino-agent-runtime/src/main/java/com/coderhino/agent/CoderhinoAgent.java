@@ -12,14 +12,28 @@ import com.coderhino.state.BootstrapState;
 import com.coderhino.state.SessionRuntime;
 import com.coderhino.tools.ToolDefinition;
 import com.coderhino.tools.ToolRegistry;
+import com.coderhino.tools.ToolContext;
 import com.coderhino.tools.runtime.ToolCommandRegistry;
 import com.coderhino.types.Message;
 import com.coderhino.types.PermissionMode;
+import com.coderhino.types.PermissionResult;
+import com.coderhino.types.ToolInputSchema;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.stream.Stream;
 
 public final class CoderhinoAgent {
     private final AgentConfig config;
@@ -123,6 +137,13 @@ public final class CoderhinoAgent {
         AppState state,
         BootstrapState bootstrapState
     ) {
+        public boolean isSuccess() {
+            return stopReason == com.coderhino.query.QueryResult.StopReason.END_TURN;
+        }
+
+        public boolean isError() {
+            return stopReason == com.coderhino.query.QueryResult.StopReason.ERROR;
+        }
     }
 
     public record AgentConfig(
@@ -158,6 +179,11 @@ public final class CoderhinoAgent {
         private double maxBudgetUsd = 0.0;
         private BootstrapState bootstrapState;
         private ToolCommandRegistry commandRegistry;
+        private String apiKey = System.getenv("ANTHROPIC_API_KEY");
+        private String apiBaseUrl = System.getenv("ANTHROPIC_BASE_URL") == null ? "https://api.anthropic.com" : System.getenv("ANTHROPIC_BASE_URL");
+        private com.coderhino.query.ProviderApiType providerApiType = com.coderhino.query.ProviderApiType.CLAUDE_CODE;
+        private long contextWindow = ModelClientFactory.DEFAULT_CONTEXT_WINDOW;
+        private long maxOutputTokens = ModelClientFactory.DEFAULT_MAX_OUTPUT_TOKENS;
         private final List<ToolDefinition<?, ?>> customTools = new ArrayList<>();
 
         public Builder modelClient(ModelClient modelClient) {
@@ -240,11 +266,40 @@ public final class CoderhinoAgent {
             return this;
         }
 
+        public Builder apiKey(String apiKey) {
+            this.apiKey = apiKey;
+            return this;
+        }
+
+        public Builder apiBaseUrl(String apiBaseUrl) {
+            if (apiBaseUrl != null && !apiBaseUrl.isBlank()) {
+                this.apiBaseUrl = apiBaseUrl;
+            }
+            return this;
+        }
+
+        public Builder providerApiType(com.coderhino.query.ProviderApiType providerApiType) {
+            this.providerApiType = providerApiType == null ? this.providerApiType : providerApiType;
+            return this;
+        }
+
+        public Builder contextWindow(long contextWindow) {
+            this.contextWindow = contextWindow;
+            return this;
+        }
+
+        public Builder maxOutputTokens(long maxOutputTokens) {
+            this.maxOutputTokens = maxOutputTokens;
+            return this;
+        }
+
         public CoderhinoAgent build() {
             var resolvedServiceRegistry = serviceRegistry == null ? ServiceRegistry.createEmbeddedDefault(cwd) : serviceRegistry;
-            var resolvedToolRegistry = toolRegistry == null ? ToolRegistry.createReadOnlyDefault() : toolRegistry;
+            var resolvedToolRegistry = toolRegistry == null ? confinedEmbeddedToolRegistry(cwd) : toolRegistry;
             resolvedToolRegistry = resolvedToolRegistry.withAll(customTools);
-            var resolvedModelClient = modelClient == null ? ModelClientFactory.create(model) : modelClient;
+            var resolvedModelClient = modelClient == null
+                ? ModelClientFactory.create(model, apiKey, apiBaseUrl, providerApiType, contextWindow, maxOutputTokens)
+                : modelClient;
             var config = new AgentConfig(
                 resolvedModelClient,
                 model,
@@ -263,5 +318,210 @@ public final class CoderhinoAgent {
             );
             return new CoderhinoAgent(config);
         }
+    }
+
+    private static ToolRegistry confinedEmbeddedToolRegistry(Path cwd) {
+        var workspace = cwd.toAbsolutePath().normalize();
+        return new ToolRegistry(List.of(
+            new ConfinedFileReadTool(workspace),
+            new ConfinedGlobTool(workspace),
+            new ConfinedGrepTool(workspace)
+        ));
+    }
+
+    private static Path confinedPath(Path workspace, String rawPath) {
+        var path = Path.of(rawPath);
+        var resolved = path.isAbsolute() ? path.normalize() : workspace.resolve(path).normalize();
+        if (!resolved.startsWith(workspace)) {
+            throw new IllegalArgumentException("Path must stay within workspace: " + workspace);
+        }
+        return resolved;
+    }
+
+    private static final class ConfinedFileReadTool implements ToolDefinition<ConfinedFileReadTool.Input, String> {
+        private static final int MAX_FILE_SIZE_BYTES = 100 * 1024;
+        private final Path workspace;
+
+        private ConfinedFileReadTool(Path workspace) {
+            this.workspace = workspace;
+        }
+
+        @Override public String name() { return "read_file"; }
+        @Override public String description() { return "Read a UTF-8 text file with numbered lines"; }
+        @Override public boolean isReadOnly() { return true; }
+        @Override public ToolInputSchema inputSchema() {
+            return ToolInputSchema.object(Map.of(
+                "path", Map.of("type", "string"),
+                "offset", Map.of("type", "integer"),
+                "limit", Map.of("type", "integer")
+            ));
+        }
+        @Override public PermissionResult validate(Input input, ToolContext context) {
+            if (input.path() == null || input.path().isBlank()) return PermissionResult.deny("Path must not be blank.");
+            confinedPath(workspace, input.path());
+            return PermissionResult.allow();
+        }
+        @Override public String execute(Input input, ToolContext context) throws Exception {
+            var target = confinedPath(workspace, input.path());
+            if (!Files.exists(target)) throw new IOException("File not found: " + target);
+            var rawContent = Files.readString(target, StandardCharsets.UTF_8);
+            if (rawContent.length() > MAX_FILE_SIZE_BYTES) rawContent = rawContent.substring(0, MAX_FILE_SIZE_BYTES) + System.lineSeparator() + "... [truncated at 100KB]";
+            var lines = rawContent.split("\\R", -1);
+            int start = Math.max(0, (input.offset() == null ? 1 : input.offset()) - 1);
+            int limit = input.limit() == null ? lines.length : Math.max(0, input.limit());
+            int end = Math.min(lines.length, start + limit);
+            var sb = new StringBuilder();
+            for (int i = start; i < end; i++) {
+                if (sb.length() > 0) sb.append(System.lineSeparator());
+                sb.append("%d: %s".formatted(i + 1, lines[i]));
+            }
+            return sb.toString();
+        }
+        record Input(String path, Integer offset, Integer limit) {}
+    }
+
+    private static final class ConfinedGlobTool implements ToolDefinition<ConfinedGlobTool.Input, ConfinedGlobTool.Output> {
+        private static final int MAX_RESULTS = 500;
+        private static final Set<String> EXCLUDED_DIRS = Set.of(".git", ".svn", ".hg", ".bzr", ".jj", ".sl", "node_modules", ".gradle", "target", "__pycache__");
+        private final Path workspace;
+
+        private ConfinedGlobTool(Path workspace) {
+            this.workspace = workspace;
+        }
+
+        @Override public String name() { return "glob"; }
+        @Override public String description() { return "Match files under a directory using a glob pattern"; }
+        @Override public boolean isReadOnly() { return true; }
+        @Override public ToolInputSchema inputSchema() { return ToolInputSchema.object(Map.of("pattern", Map.of("type", "string"), "basePath", Map.of("type", "string"))); }
+        @Override public PermissionResult validate(Input input, ToolContext context) {
+            if (input.pattern() == null || input.pattern().isBlank()) return PermissionResult.deny("Pattern must not be blank.");
+            if (input.basePath() != null && !input.basePath().isBlank()) confinedPath(workspace, input.basePath());
+            return PermissionResult.allow();
+        }
+        @Override public Output execute(Input input, ToolContext context) throws Exception {
+            var basePath = input.basePath() == null || input.basePath().isBlank() ? workspace : confinedPath(workspace, input.basePath());
+            if (!Files.exists(basePath)) return new Output(List.of(), 0, true);
+            var matcher = FileSystems.getDefault().getPathMatcher("glob:" + input.pattern());
+            var results = new ArrayList<String>();
+            try (Stream<Path> stream = Files.walk(basePath)) {
+                stream.filter(Files::isRegularFile)
+                    .filter(path -> !isExcluded(path, basePath))
+                    .filter(path -> matcher.matches(basePath.relativize(path)) || matcher.matches(path.getFileName()))
+                    .sorted(Comparator.naturalOrder())
+                    .forEach(path -> { if (results.size() < MAX_RESULTS) results.add(path.toAbsolutePath().normalize().toString()); });
+            }
+            return new Output(results, results.size(), results.size() >= MAX_RESULTS);
+        }
+        private boolean isExcluded(Path path, Path basePath) {
+            var relative = basePath.relativize(path);
+            for (int i = 0; i < relative.getNameCount(); i++) if (EXCLUDED_DIRS.contains(relative.getName(i).toString())) return true;
+            return false;
+        }
+        record Input(String pattern, String basePath) {}
+        record Output(List<String> filenames, int numFiles, boolean truncated) {}
+    }
+
+    private static final class ConfinedGrepTool implements ToolDefinition<ConfinedGrepTool.Input, ConfinedGrepTool.Output> {
+        private static final int DEFAULT_HEAD_LIMIT = 250;
+        private static final int MAX_RESULTS = 1000;
+        private static final int MAX_LINE_LENGTH = 500;
+        private static final Set<String> EXCLUDED_DIRS = Set.of(".git", ".svn", ".hg", ".bzr", ".jj", ".sl", "node_modules", ".gradle", "target", "__pycache__");
+        private final Path workspace;
+
+        private ConfinedGrepTool(Path workspace) {
+            this.workspace = workspace;
+        }
+
+        @Override public String name() { return "grep"; }
+        @Override public String description() { return "Search file contents with a regular expression pattern"; }
+        @Override public boolean isReadOnly() { return true; }
+        @Override public ToolInputSchema inputSchema() {
+            return ToolInputSchema.object(Map.of(
+                "pattern", Map.of("type", "string"), "basePath", Map.of("type", "string"), "glob", Map.of("type", "string"),
+                "output_mode", Map.of("type", "string"), "context", Map.of("type", "integer"), "head_limit", Map.of("type", "integer"),
+                "case_insensitive", Map.of("type", "boolean")
+            ));
+        }
+        @Override public PermissionResult validate(Input input, ToolContext context) {
+            if (input.pattern() == null || input.pattern().isBlank()) return PermissionResult.deny("Pattern must not be blank.");
+            try { Pattern.compile(input.pattern(), Boolean.TRUE.equals(input.caseInsensitive()) ? Pattern.CASE_INSENSITIVE : 0); }
+            catch (PatternSyntaxException e) { return PermissionResult.deny("Invalid regex pattern: " + e.getMessage()); }
+            if (input.basePath() != null && !input.basePath().isBlank()) confinedPath(workspace, input.basePath());
+            return PermissionResult.allow();
+        }
+        @Override public Output execute(Input input, ToolContext context) throws Exception {
+            var basePath = input.basePath() == null || input.basePath().isBlank() ? workspace : confinedPath(workspace, input.basePath());
+            if (!Files.exists(basePath)) return new Output("content", 0, List.of(), "Path does not exist: " + basePath, 0, 0, false);
+            var pattern = Pattern.compile(input.pattern(), Boolean.TRUE.equals(input.caseInsensitive()) ? Pattern.CASE_INSENSITIVE : 0);
+            var mode = input.outputMode() == null ? "files_with_matches" : input.outputMode();
+            var limit = input.headLimit() == null ? DEFAULT_HEAD_LIMIT : Math.max(0, input.headLimit());
+            var effectiveLimit = limit == 0 ? MAX_RESULTS : Math.min(limit, MAX_RESULTS);
+            if ("files_with_matches".equals(mode)) return filesMode(basePath, pattern, input.glob(), effectiveLimit);
+            if ("count".equals(mode)) return countMode(basePath, pattern, input.glob(), effectiveLimit);
+            return contentMode(basePath, pattern, input.glob(), input.context() == null ? 0 : Math.max(0, input.context()), effectiveLimit);
+        }
+        private Output filesMode(Path basePath, Pattern pattern, String globPattern, int limit) throws Exception {
+            var files = new ArrayList<String>();
+            for (var path : candidateFiles(basePath, globPattern)) {
+                if (files.size() >= limit) break;
+                try { if (pattern.matcher(Files.readString(path, StandardCharsets.UTF_8)).find()) files.add(path.toAbsolutePath().normalize().toString()); } catch (Exception ignored) {}
+            }
+            return new Output("files_with_matches", files.size(), files, null, 0, 0, files.size() >= limit);
+        }
+        private Output countMode(Path basePath, Pattern pattern, String globPattern, int limit) throws Exception {
+            var lines = new ArrayList<String>();
+            int totalMatches = 0;
+            for (var path : candidateFiles(basePath, globPattern)) {
+                if (lines.size() >= limit) break;
+                try {
+                    var matcher = pattern.matcher(Files.readString(path, StandardCharsets.UTF_8));
+                    int count = 0;
+                    while (matcher.find()) count++;
+                    if (count > 0) { lines.add(path.toAbsolutePath().normalize() + ":" + count); totalMatches += count; }
+                } catch (Exception ignored) {}
+            }
+            var content = String.join(System.lineSeparator(), lines);
+            return new Output("count", lines.size(), List.of(), content.isEmpty() ? null : content, 0, totalMatches, lines.size() >= limit);
+        }
+        private Output contentMode(Path basePath, Pattern pattern, String globPattern, int contextLines, int limit) throws Exception {
+            var resultLines = new ArrayList<String>();
+            int totalFiles = 0;
+            for (var path : candidateFiles(basePath, globPattern)) {
+                if (resultLines.size() >= limit) break;
+                try {
+                    var allLines = Files.readAllLines(path, StandardCharsets.UTF_8);
+                    var indices = new LinkedHashSet<Integer>();
+                    for (int i = 0; i < allLines.size(); i++) if (pattern.matcher(allLines.get(i)).find()) for (int j = Math.max(0, i - contextLines); j <= Math.min(allLines.size() - 1, i + contextLines); j++) indices.add(j);
+                    if (!indices.isEmpty()) totalFiles++;
+                    for (int idx : indices) {
+                        if (resultLines.size() >= limit) break;
+                        var line = allLines.get(idx);
+                        if (line.length() > MAX_LINE_LENGTH) line = line.substring(0, MAX_LINE_LENGTH) + "... [truncated]";
+                        resultLines.add("%s:%d:%s".formatted(path.toAbsolutePath().normalize(), idx + 1, line));
+                    }
+                } catch (Exception ignored) {}
+            }
+            return new Output("content", totalFiles, List.of(), String.join(System.lineSeparator(), resultLines), resultLines.size(), 0, resultLines.size() >= limit);
+        }
+        private List<Path> candidateFiles(Path basePath, String globPattern) throws Exception {
+            try (Stream<Path> paths = Files.walk(basePath)) {
+                return paths.filter(Files::isRegularFile).filter(p -> !isExcluded(p, basePath)).filter(p -> matchesGlob(p, basePath, globPattern)).toList();
+            }
+        }
+        private boolean isExcluded(Path path, Path basePath) {
+            var relative = basePath.relativize(path);
+            for (int i = 0; i < relative.getNameCount(); i++) if (EXCLUDED_DIRS.contains(relative.getName(i).toString())) return true;
+            return false;
+        }
+        private boolean matchesGlob(Path path, Path basePath, String globPattern) {
+            if (globPattern == null || globPattern.isBlank()) return true;
+            try {
+                var matcher = FileSystems.getDefault().getPathMatcher("glob:" + globPattern);
+                var relative = basePath.relativize(path);
+                return matcher.matches(relative) || matcher.matches(path.getFileName());
+            } catch (Exception e) { return true; }
+        }
+        record Input(String pattern, String basePath, String glob, String outputMode, Integer context, Integer headLimit, Boolean caseInsensitive) {}
+        record Output(String mode, int numFiles, List<String> filenames, String content, int numLines, int numMatches, boolean truncated) {}
     }
 }

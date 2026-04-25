@@ -29,6 +29,7 @@ public final class AgentModelClient implements ModelClient {
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(360);
     private static final int MAX_ATTEMPTS = 5;
     private static final long DEFAULT_CONTEXT_WINDOW = 128000L;
+    private static final long DEFAULT_MAX_OUTPUT_TOKENS = 128000L;
     private static final Logger log = LoggerFactory.getLogger(AgentModelClient.class);
 
     private final HttpClient httpClient;
@@ -37,6 +38,7 @@ public final class AgentModelClient implements ModelClient {
     private final String apiKey;
     private final String model;
     private final long contextWindow;
+    private final long maxOutputTokens;
 
     public AgentModelClient(
         HttpClient httpClient,
@@ -47,14 +49,22 @@ public final class AgentModelClient implements ModelClient {
         ProviderApiType apiType,
         long contextWindow
     ) {
-        this(httpClient, objectMapper, baseUrl, apiKey, model, contextWindow);
+        this(httpClient, objectMapper, baseUrl, apiKey, model, apiType, contextWindow, DEFAULT_MAX_OUTPUT_TOKENS);
     }
 
-    public AgentModelClient(HttpClient httpClient, ObjectMapper objectMapper, String baseUrl, String apiKey, String model) {
-        this(httpClient, objectMapper, baseUrl, apiKey, model, DEFAULT_CONTEXT_WINDOW);
-    }
-
-    public AgentModelClient(HttpClient httpClient, ObjectMapper objectMapper, String baseUrl, String apiKey, String model, long contextWindow) {
+    public AgentModelClient(
+        HttpClient httpClient,
+        ObjectMapper objectMapper,
+        String baseUrl,
+        String apiKey,
+        String model,
+        ProviderApiType apiType,
+        long contextWindow,
+        long maxOutputTokens
+    ) {
+        if (apiType == ProviderApiType.OPENAI) {
+            throw ProviderApiType.unsupportedOpenAi();
+        }
         if (httpClient == null) throw new IllegalArgumentException("httpClient must not be null");
         if (objectMapper == null) throw new IllegalArgumentException("objectMapper must not be null");
         if (baseUrl == null || baseUrl.isBlank()) throw new IllegalArgumentException("baseUrl must not be null or blank");
@@ -66,6 +76,15 @@ public final class AgentModelClient implements ModelClient {
         this.apiKey = apiKey;
         this.model = model;
         this.contextWindow = contextWindow > 0 ? contextWindow : DEFAULT_CONTEXT_WINDOW;
+        this.maxOutputTokens = maxOutputTokens > 0 ? maxOutputTokens : DEFAULT_MAX_OUTPUT_TOKENS;
+    }
+
+    public AgentModelClient(HttpClient httpClient, ObjectMapper objectMapper, String baseUrl, String apiKey, String model) {
+        this(httpClient, objectMapper, baseUrl, apiKey, model, DEFAULT_CONTEXT_WINDOW);
+    }
+
+    public AgentModelClient(HttpClient httpClient, ObjectMapper objectMapper, String baseUrl, String apiKey, String model, long contextWindow) {
+        this(httpClient, objectMapper, baseUrl, apiKey, model, ProviderApiType.CLAUDE_CODE, contextWindow, DEFAULT_MAX_OUTPUT_TOKENS);
     }
 
     @Override
@@ -106,7 +125,7 @@ public final class AgentModelClient implements ModelClient {
                         MAX_ATTEMPTS,
                         QueryLogFormatter.summarizeContent(errorBody)
                     );
-                    return new ModelResponse.AssistantReply(
+                    return new ModelResponse.ModelError(
                         "Anthropic API error (%d): %s".formatted(streamResponse.statusCode(), errorBody)
                     );
                 }
@@ -132,7 +151,7 @@ public final class AgentModelClient implements ModelClient {
                             MAX_ATTEMPTS,
                             QueryLogFormatter.summarizeContent(fallbackResponse.body())
                         );
-                        return new ModelResponse.AssistantReply(
+                        return new ModelResponse.ModelError(
                             "Anthropic API error (%d): %s".formatted(fallbackResponse.statusCode(), fallbackResponse.body())
                         );
                     }
@@ -155,7 +174,7 @@ public final class AgentModelClient implements ModelClient {
 
         if (lastException != null) {
             log.error("Anthropic request failed after {} attempts", MAX_ATTEMPTS, lastException);
-            return new ModelResponse.AssistantReply("Anthropic request failed: %s".formatted(lastException.getMessage()));
+            return new ModelResponse.ModelError("Anthropic request failed: %s".formatted(lastException.getMessage()));
         }
         if (lastErrorBody != null) {
             log.error(
@@ -163,9 +182,9 @@ public final class AgentModelClient implements ModelClient {
                 MAX_ATTEMPTS,
                 QueryLogFormatter.summarizeContent(lastErrorBody)
             );
-            return new ModelResponse.AssistantReply("Anthropic request failed: %s".formatted(lastErrorBody));
+            return new ModelResponse.ModelError("Anthropic request failed: %s".formatted(lastErrorBody));
         }
-        return new ModelResponse.AssistantReply("Anthropic request failed.");
+        return new ModelResponse.ModelError("Anthropic request failed.");
     }
 
     private HttpResponse<Stream<String>> sendStreamingRequest(Map<String, Object> payload) throws Exception {
@@ -445,7 +464,7 @@ public final class AgentModelClient implements ModelClient {
     Map<String, Object> buildPayload(QueryRequest request, boolean stream) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("model", model);
-        payload.put("max_tokens", contextWindow);
+        payload.put("max_tokens", maxOutputTokens);
         payload.put("stream", stream);
 
         if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {

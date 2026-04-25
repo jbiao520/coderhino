@@ -28,8 +28,10 @@ class CoderhinoAgentAutoConfigurationTest {
         contextRunner
             .withPropertyValues(
                 "coderhino.agent.model=test-model",
+                "coderhino.agent.api-key=test-key",
                 "coderhino.agent.permission-mode=BYPASS",
                 "coderhino.agent.max-tool-iterations=7",
+                "coderhino.agent.max-output-tokens=4096",
                 "coderhino.agent.max-budget-usd=0.25",
                 "coderhino.agent.append-system-prompt=extra guidance"
             )
@@ -61,7 +63,7 @@ class CoderhinoAgentAutoConfigurationTest {
     @Test
     void exposesOnlyConfiguredToolSubset() {
         contextRunner
-            .withPropertyValues("coderhino.agent.enabled-tools=read_file,grep")
+            .withPropertyValues("coderhino.agent.api-key=test-key", "coderhino.agent.enabled-tools=read_file,grep")
             .run(context -> {
                 var agent = context.getBean(CoderhinoAgent.class);
                 var toolNames = agent.config().toolRegistry().all().stream()
@@ -70,6 +72,28 @@ class CoderhinoAgentAutoConfigurationTest {
 
                 assertThat(toolNames).containsExactly("read_file", "grep");
             });
+    }
+
+    @Test
+    void defaultSpringToolsUseHardenedEmbeddedSet() {
+        contextRunner
+            .withPropertyValues("coderhino.agent.api-key=test-key")
+            .run(context -> {
+                var agent = context.getBean(CoderhinoAgent.class);
+                var toolNames = agent.config().toolRegistry().all().stream()
+                    .map(com.coderhino.tools.ToolDefinition::name)
+                    .toList();
+
+                assertThat(toolNames).containsExactly("read_file", "glob", "grep");
+            });
+    }
+
+    @Test
+    void openAiProviderFailsClearly() {
+        contextRunner
+            .withPropertyValues("coderhino.agent.api-key=test-key", "coderhino.agent.provider-api-type=OPENAI")
+            .run(context -> assertThat(context.getStartupFailure())
+                .hasMessageContaining("OpenAI-compatible requests are not supported in this release"));
     }
 
     @Configuration(proxyBeanMethods = false)

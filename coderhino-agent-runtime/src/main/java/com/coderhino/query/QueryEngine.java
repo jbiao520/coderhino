@@ -283,6 +283,9 @@ public final class QueryEngine {
     }
 
     private void persistTerminalAssistantMessage(BootstrapState bootstrapState, QueryResult result, int assistantMessagesBeforeRun) {
+        if (result.isError()) {
+            return;
+        }
         if (result.text() == null || result.text().isBlank()) {
             return;
         }

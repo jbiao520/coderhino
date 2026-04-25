@@ -4,6 +4,7 @@ import com.coderhino.query.ModelClient;
 import com.coderhino.query.ModelResponse;
 import com.coderhino.query.QueryEventSink;
 import com.coderhino.query.QueryRequest;
+import com.coderhino.query.QueryResult;
 import com.coderhino.server.NoOpServerService;
 import com.coderhino.services.analytics.NoOpAnalyticsService;
 import com.coderhino.services.analytics.NoOpFeatureFlagService;
@@ -12,10 +13,12 @@ import com.coderhino.services.trigger.NoOpRemoteTriggerService;
 import com.coderhino.state.BootstrapState;
 import com.coderhino.tools.ToolDefinition;
 import com.coderhino.tools.ToolRegistry;
+import com.coderhino.tools.builtin.FileReadTool;
 import com.coderhino.types.PermissionMode;
 import com.coderhino.types.ToolInputSchema;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 
@@ -37,10 +40,43 @@ class CoderhinoAgentTest {
             .toList();
 
         assertTrue(toolNames.contains("read_file"));
+        assertTrue(toolNames.contains("glob"));
         assertTrue(toolNames.contains("grep"));
+        assertEquals(List.of("read_file", "glob", "grep"), toolNames);
         assertFalse(toolNames.contains("bash"));
         assertFalse(toolNames.contains("write_file"));
         assertFalse(toolNames.contains("edit_file"));
+        assertFalse(toolNames.contains("web_fetch"));
+        assertFalse(toolNames.contains("web_search"));
+        assertFalse(toolNames.contains("mcp"));
+        assertFalse(toolNames.contains("lsp"));
+    }
+
+    @Test
+    void explicitEmptyBuiltInToolsPublishesNoBuiltIns() {
+        var modelClient = new CapturingModelClient();
+        var agent = CoderhinoAgent.builder()
+            .modelClient(modelClient)
+            .enabledBuiltInTools(List.of())
+            .build();
+
+        agent.run("hello");
+
+        assertTrue(modelClient.request.tools().isEmpty());
+    }
+
+    @Test
+    void explicitBuiltInToolsCanOptIntoNetworkTools() {
+        var agent = CoderhinoAgent.builder()
+            .modelClient(new CapturingModelClient())
+            .enabledBuiltInTools(List.of("web_fetch"))
+            .build();
+
+        var toolNames = agent.config().toolRegistry().all().stream()
+            .map(ToolDefinition::name)
+            .toList();
+
+        assertEquals(List.of("web_fetch"), toolNames);
     }
 
     @Test
@@ -57,6 +93,24 @@ class CoderhinoAgentTest {
         assertEquals(ModelResponse.Usage.class, result.usage().getClass());
         assertEquals(2, result.state().messages().size());
         assertNotNull(modelClient.request);
+        assertTrue(result.isSuccess());
+    }
+
+    @Test
+    void modelErrorReturnsErrorResultAndDoesNotPersistAssistantReply() {
+        var sink = new CapturingQueryEventSink();
+        var agent = CoderhinoAgent.builder()
+            .modelClient((state, request) -> new ModelResponse.ModelError("provider failed"))
+            .eventSink(sink)
+            .build();
+
+        var result = agent.run("hello");
+
+        assertTrue(result.isError());
+        assertEquals(QueryResult.StopReason.ERROR, result.stopReason());
+        assertEquals("provider failed", sink.lastError);
+        assertFalse(sink.completedCalled);
+        assertEquals(1, result.state().messages().size());
     }
 
     @Test
@@ -88,6 +142,63 @@ class CoderhinoAgentTest {
 
         assertEquals("done", result.finalText());
         assertEquals("hello", sink.lastToolResult);
+    }
+
+    @Test
+    void requestSpecificBootstrapStateDoesNotUpdateManagedState() {
+        var agent = CoderhinoAgent.builder()
+            .modelClient(new CapturingModelClient())
+            .build();
+        var requestState = new BootstrapState(agent.state().withMessages(List.of()));
+
+        var result = agent.run(new CoderhinoAgent.AgentRequest("hello", "hello", null, requestState));
+
+        assertEquals(2, result.state().messages().size());
+        assertTrue(agent.state().messages().isEmpty());
+    }
+
+    @Test
+    void embeddedDefaultFileToolsAreConfinedToWorkspace() throws Exception {
+        var workspace = Files.createTempDirectory("coderhino-workspace");
+        var secret = Files.createTempFile("coderhino-secret", ".txt");
+        Files.writeString(workspace.resolve("allowed.txt"), "allowed");
+        Files.writeString(secret, "secret");
+        var modelClient = new SequentialToolModelClient(List.of(
+            new ModelResponse.ToolRequest("read_file", Map.of("path", "allowed.txt"), "tool-1"),
+            new ModelResponse.ToolRequest("read_file", Map.of("path", secret.toAbsolutePath().toString()), "tool-2")
+        ));
+        var sink = new CapturingQueryEventSink();
+        var agent = CoderhinoAgent.builder()
+            .modelClient(modelClient)
+            .cwd(workspace)
+            .eventSink(sink)
+            .build();
+
+        agent.run("read files");
+
+        assertTrue(sink.toolResults.get(0).contains("allowed"));
+        assertTrue(sink.toolResults.get(1).contains("Path must stay within workspace"));
+    }
+
+    @Test
+    void explicitHostRegistryIsNotWorkspaceConfined() throws Exception {
+        var workspace = Files.createTempDirectory("coderhino-workspace");
+        var outside = Files.createTempFile("coderhino-outside", ".txt");
+        Files.writeString(outside, "outside");
+        var modelClient = new SequentialToolModelClient(List.of(
+            new ModelResponse.ToolRequest("read_file", Map.of("path", outside.toAbsolutePath().toString()), "tool-1")
+        ));
+        var sink = new CapturingQueryEventSink();
+        var agent = CoderhinoAgent.builder()
+            .modelClient(modelClient)
+            .cwd(workspace)
+            .toolRegistry(new ToolRegistry(List.of(new FileReadTool())))
+            .eventSink(sink)
+            .build();
+
+        agent.run("read outside");
+
+        assertTrue(sink.lastToolResult.contains("outside"));
     }
 
     @Test
@@ -124,6 +235,25 @@ class CoderhinoAgentTest {
         assertTrue(sink.lastToolResult.contains("Unknown tool: missing_tool"));
     }
 
+    @Test
+    void invalidCustomToolInputReturnsClearError() {
+        var modelClient = new SequentialToolModelClient(List.of(
+            new ModelResponse.ToolRequest("host_echo", Map.of("value", Map.of("nested", "wrong")), "tool-1")
+        ));
+        var sink = new CapturingQueryEventSink();
+        var agent = CoderhinoAgent.builder()
+            .modelClient(modelClient)
+            .toolRegistry(new ToolRegistry(List.of()))
+            .addTool(new EchoTool())
+            .eventSink(sink)
+            .build();
+
+        agent.run("use echo");
+
+        assertTrue(sink.lastToolResult.contains("Invalid input for tool host_echo"));
+        assertTrue(sink.lastToolResult.contains("arguments did not match expected input structure"));
+    }
+
     private static final class CapturingModelClient implements ModelClient {
         private QueryRequest request;
 
@@ -153,16 +283,36 @@ class CoderhinoAgentTest {
         }
     }
 
+    private static final class SequentialToolModelClient implements ModelClient {
+        private final List<ModelResponse.ToolRequest> requests;
+        private int calls;
+
+        private SequentialToolModelClient(List<ModelResponse.ToolRequest> requests) {
+            this.requests = requests;
+        }
+
+        @Override
+        public ModelResponse complete(BootstrapState bootstrapState, QueryRequest request) {
+            if (calls < requests.size()) {
+                return requests.get(calls++);
+            }
+            return new ModelResponse.AssistantReply("done");
+        }
+    }
+
     private static final class CapturingQueryEventSink implements QueryEventSink {
         private String lastToolResult = "";
+        private final java.util.ArrayList<String> toolResults = new java.util.ArrayList<>();
+        private String lastError = "";
+        private boolean completedCalled;
 
         @Override public void onTextChunk(String chunk) {}
         @Override public void onStatus(String message) {}
         @Override public void onToolCall(String toolName, String toolUseId, String argumentsJson) {}
-        @Override public void onToolResult(String toolName, String toolUseId, String result) { this.lastToolResult = result; }
+        @Override public void onToolResult(String toolName, String toolUseId, String result) { this.lastToolResult = result; this.toolResults.add(result); }
         @Override public void onUsage(long inputTokens, long outputTokens, long cacheCreationTokens, long cacheReadTokens) {}
-        @Override public void onError(String error) {}
-        @Override public void onCompleted(String finalText) {}
+        @Override public void onError(String error) { this.lastError = error; }
+        @Override public void onCompleted(String finalText) { this.completedCalled = true; }
     }
 
     private static final class EchoTool implements ToolDefinition<EchoTool.Input, String> {

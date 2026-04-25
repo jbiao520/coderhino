@@ -142,7 +142,7 @@ class QueryEngineMessageLifecycleTest {
     }
 
     @Test
-    void executePersistsTerminalErrorResultAsAssistantMessage() {
+    void executeDoesNotPersistTerminalErrorResultAsAssistantMessage() {
         var engine = buildEngine((state, request) -> {
             throw new IllegalStateException("boom");
         }, 5);
@@ -150,12 +150,11 @@ class QueryEngineMessageLifecycleTest {
         var result = engine.execute(bootstrapState, "prompt");
 
         var messages = bootstrapState.get().messages();
-        assertEquals(2, messages.size());
+        assertEquals(1, messages.size());
         assertEquals("prompt", messages.get(0).content());
-        assertEquals(result.text(), messages.get(1).content());
         assertEquals("Query engine error: boom", result.text());
         assertTrue(result.isError());
-        assertEquals(1, messages.stream().filter(Message.AssistantMessage.class::isInstance).count());
+        assertEquals(0, messages.stream().filter(Message.AssistantMessage.class::isInstance).count());
     }
 
     @Test
