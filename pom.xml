@@ -16,7 +16,7 @@
         <module>frontend</module>
         <module>coderhino-tools</module>
         <module>coderhino-commands</module>
-        <module>coderhino-web-shared</module>
+        <module>coderhino-runtime-api</module>
         <module>coderhino-services</module>
         <module>coderhino-backend</module>
         <module>coderhino-web</module>

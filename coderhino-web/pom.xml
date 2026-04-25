@@ -34,7 +34,7 @@
 
         <dependency>
             <groupId>com.coderhino</groupId>
-            <artifactId>coderhino-web-shared</artifactId>
+            <artifactId>coderhino-runtime-api</artifactId>
             <version>${project.version}</version>
         </dependency>
 

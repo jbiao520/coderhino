@@ -11,11 +11,11 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>coderhino-web-shared</artifactId>
+    <artifactId>coderhino-runtime-api</artifactId>
     <packaging>jar</packaging>
 
-    <name>Coderhino Web Shared</name>
-    <description>Shared persisted web configuration support for Coderhino</description>
+    <name>Coderhino Runtime API</name>
+    <description>Shared runtime contracts and support types for Coderhino</description>
 
     <dependencies>
         <dependency>

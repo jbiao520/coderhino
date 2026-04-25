@@ -72,7 +72,7 @@ public final class HookExecutor {
             return new HookExecutionResult(entry, process.exitValue(), stdoutRef.get(), stderrRef.get(), false);
 
         } catch (Exception e) {
-            System.err.println("[hooks] Failed to execute hook command: " + entry.command() + " - " + e.getMessage());
+            System.err.println("[hooks] Failed to execute hook command: " + entry.command() + " \u2014 " + e.getMessage());
             return new HookExecutionResult(entry, -1, "", e.getMessage(), false);
         }
     }
