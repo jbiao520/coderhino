@@ -11,39 +11,17 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>coderhino-tools</artifactId>
+    <artifactId>coderhino-services</artifactId>
     <packaging>jar</packaging>
 
-    <name>Coderhino Tools</name>
-    <description>Shared tool contracts and runtime types for Coderhino</description>
+    <name>Coderhino Services</name>
+    <description>Shared service utilities for Coderhino</description>
 
     <dependencies>
         <dependency>
             <groupId>com.coderhino</groupId>
-            <artifactId>coderhino-services</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.coderhino</groupId>
             <artifactId>coderhino-web-shared</artifactId>
             <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.vladsch.flexmark</groupId>
-            <artifactId>flexmark-html2md-converter</artifactId>
-            <version>0.64.8</version>
         </dependency>
     </dependencies>
 
