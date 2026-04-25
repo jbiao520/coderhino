@@ -12,8 +12,8 @@ import com.coderhino.web.exception.RunNotFoundException;
 import com.coderhino.web.exception.SessionBusyException;
 import com.coderhino.web.session.WebSession;
 import com.coderhino.web.session.WebSessionRegistry;
-import com.coderhino.web.settings.SettingsPersistenceService;
-import com.coderhino.web.settings.WebSettings;
+import com.coderhino.config.settings.SettingsPersistenceService;
+import com.coderhino.config.settings.WebSettings;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 

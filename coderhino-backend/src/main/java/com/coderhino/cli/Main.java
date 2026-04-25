@@ -3,6 +3,7 @@ package com.coderhino.cli;
 import com.coderhino.commands.CommandRegistry;
 import com.coderhino.query.ModelClientFactory;
 import com.coderhino.query.QueryEngine;
+import com.coderhino.server.LocalServerService;
 import com.coderhino.server.ServerMode;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.state.AppState;
@@ -66,7 +67,7 @@ public class Main implements Runnable {
         }
 
         if (serve) {
-            var serviceRegistry = ServiceRegistry.createDefault(Path.of("").toAbsolutePath().normalize());
+            var serviceRegistry = ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new LocalServerService());
             serviceRegistry.serverService().start(ServerMode.API, port);
             System.out.printf("Code Rhino API server running on http://127.0.0.1:%d%n", port);
             try {
@@ -99,9 +100,9 @@ public class Main implements Runnable {
         var cwd = Path.of("").toAbsolutePath().normalize();
         var registry = CommandRegistry.createDefault(cwd);
         var toolRegistry = ToolRegistry.createDefault();
-        var serviceRegistry = ServiceRegistry.createDefault(cwd);
+        var serviceRegistry = ServiceRegistry.createAppDefault(cwd, new LocalServerService());
         var modelClient = ModelClientFactory.create(model);
-        var queryEngine = new QueryEngine(toolRegistry, modelClient, new com.coderhino.permissions.PermissionChecker(), new com.coderhino.context.ContextCollector(), serviceRegistry);
+        var queryEngine = new QueryEngine(toolRegistry, modelClient, new com.coderhino.permissions.PermissionChecker(), new com.coderhino.context.ContextCollector(), serviceRegistry, null, registry.asToolCommandRegistry());
         var shell = new ReplShell(bootstrapState, registry, toolRegistry, queryEngine, sessionStore, serviceRegistry, System.in, System.out, System.err);
 
         try {

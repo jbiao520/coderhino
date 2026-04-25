@@ -8,8 +8,8 @@ import com.coderhino.query.QueryRequest;
 import com.coderhino.query.TestQueryEngines;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.types.Message;
-import com.coderhino.web.credentials.ApiCredentials;
-import com.coderhino.web.credentials.CredentialsPersistenceService;
+import com.coderhino.config.credentials.ApiCredentials;
+import com.coderhino.config.credentials.CredentialsPersistenceService;
 import com.coderhino.web.credentials.ProviderConfigResolver;
 import com.coderhino.web.dto.RunDto;
 import com.coderhino.web.events.SessionEvent;
@@ -99,7 +99,7 @@ class RunExecutionServiceTest {
         var registry = createStubRegistry();
         var completionStore = new CompletionNotificationStore();
         var credentialsService = new CredentialsPersistenceService(tempDir.resolve("api-credentials.json"));
-        var settingsService = new com.coderhino.web.settings.SettingsPersistenceService(tempDir.resolve("web-settings.json"));
+        var settingsService = new com.coderhino.config.settings.SettingsPersistenceService(tempDir.resolve("web-settings.json"));
         var credentials = new ApiCredentials();
         credentials.setDefaultProviderId("provider-1");
         credentials.setProviders(java.util.List.of(

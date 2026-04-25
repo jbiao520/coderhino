@@ -2,11 +2,11 @@ package com.coderhino.web.session;
 
 import com.coderhino.state.SessionStore;
 import com.coderhino.types.PermissionMode;
-import com.coderhino.web.credentials.CredentialsPersistenceService;
+import com.coderhino.config.credentials.CredentialsPersistenceService;
 import com.coderhino.web.git.GitBranchResolver;
 import com.coderhino.web.events.SessionEventBus;
 import com.coderhino.web.project.ProjectPersistenceService;
-import com.coderhino.web.settings.SettingsPersistenceService;
+import com.coderhino.config.settings.SettingsPersistenceService;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -295,7 +295,7 @@ public class WebSessionRegistry {
         return defaultProvider != null ? defaultProvider.getId() : null;
     }
 
-    private String resolveInitialModel(com.coderhino.web.credentials.ApiCredentials.ApiProvider provider) {
+    private String resolveInitialModel(com.coderhino.config.credentials.ApiCredentials.ApiProvider provider) {
         if (provider != null && provider.getModels() != null && !provider.getModels().isEmpty()) {
             return provider.getModels().get(0).getId();
         }

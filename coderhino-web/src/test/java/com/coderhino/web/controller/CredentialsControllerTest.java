@@ -1,7 +1,7 @@
 package com.coderhino.web.controller;
 
-import com.coderhino.web.credentials.ApiCredentials;
-import com.coderhino.web.credentials.CredentialsPersistenceService;
+import com.coderhino.config.credentials.ApiCredentials;
+import com.coderhino.config.credentials.CredentialsPersistenceService;
 import com.coderhino.web.dto.CredentialsDto;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

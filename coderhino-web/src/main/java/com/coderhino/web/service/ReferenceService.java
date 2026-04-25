@@ -1,7 +1,7 @@
 package com.coderhino.web.service;
 
 import com.coderhino.web.dto.ReferenceDto;
-import com.coderhino.web.settings.SettingsPersistenceService;
+import com.coderhino.config.settings.SettingsPersistenceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourcePatternResolver;

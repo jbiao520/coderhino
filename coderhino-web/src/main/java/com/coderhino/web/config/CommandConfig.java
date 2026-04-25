@@ -1,11 +1,14 @@
 package com.coderhino.web.config;
 
 import com.coderhino.commands.CommandRegistry;
+import com.coderhino.server.LocalServerService;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.state.AppState;
 import com.coderhino.state.BootstrapState;
 import com.coderhino.state.SessionRuntime;
 import com.coderhino.types.PermissionMode;
+import com.coderhino.config.credentials.CredentialsPersistenceService;
+import com.coderhino.config.settings.SettingsPersistenceService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -22,7 +25,17 @@ public class CommandConfig {
 
     @Bean
     public ServiceRegistry serviceRegistry() {
-        return ServiceRegistry.createDefault(Path.of("").toAbsolutePath().normalize());
+        return ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new LocalServerService());
+    }
+
+    @Bean
+    public CredentialsPersistenceService credentialsPersistenceService() {
+        return new CredentialsPersistenceService();
+    }
+
+    @Bean
+    public SettingsPersistenceService settingsPersistenceService() {
+        return new SettingsPersistenceService();
     }
 
     @Bean

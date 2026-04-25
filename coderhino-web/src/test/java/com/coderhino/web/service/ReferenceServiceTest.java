@@ -1,7 +1,7 @@
 package com.coderhino.web.service;
 
-import com.coderhino.web.settings.SettingsPersistenceService;
-import com.coderhino.web.settings.WebSettings;
+import com.coderhino.config.settings.SettingsPersistenceService;
+import com.coderhino.config.settings.WebSettings;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.ByteArrayResource;

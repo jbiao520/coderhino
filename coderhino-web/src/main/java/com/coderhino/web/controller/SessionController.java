@@ -1,6 +1,6 @@
 package com.coderhino.web.controller;
 
-import com.coderhino.web.credentials.CredentialsPersistenceService;
+import com.coderhino.config.credentials.CredentialsPersistenceService;
 import com.coderhino.web.dto.ErrorResponse;
 import com.coderhino.web.dto.SessionDto;
 import com.coderhino.web.dto.SessionContextDto;

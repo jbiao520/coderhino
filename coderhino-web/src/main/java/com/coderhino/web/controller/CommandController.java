@@ -237,7 +237,9 @@ public class CommandController {
             modelClient,
             new com.coderhino.permissions.PermissionChecker(),
             new com.coderhino.context.ContextCollector(),
-            serviceRegistry
+            serviceRegistry,
+            null,
+            commandRegistry.asToolCommandRegistry()
         );
         var projectId = sessionRegistry.getProjectIdForSession(sessionId).orElse(null);
         try (var ignored = TaskOriginContext.open(projectId, session.getSessionId())) {

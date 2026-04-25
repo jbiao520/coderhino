@@ -43,7 +43,7 @@ class MessageControllerTest {
         private StubRunService() {
             super(new com.coderhino.web.events.SessionEventBus(new com.fasterxml.jackson.databind.ObjectMapper()),
                 new com.coderhino.web.approval.ApprovalService(new com.coderhino.web.events.SessionEventBus(new com.fasterxml.jackson.databind.ObjectMapper())),
-                new com.coderhino.web.settings.SettingsPersistenceService(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "message-controller-test-settings-" + System.currentTimeMillis() + ".json")),
+                new com.coderhino.config.settings.SettingsPersistenceService(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "message-controller-test-settings-" + System.currentTimeMillis() + ".json")),
                 new com.coderhino.web.service.RunExecutionService(new com.coderhino.web.events.SessionEventBus(new com.fasterxml.jackson.databind.ObjectMapper()),
                     new com.coderhino.web.session.WebSessionRegistry(
                         new com.coderhino.web.session.SessionPersistenceService(java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "message-controller-test-session-" + System.currentTimeMillis())),

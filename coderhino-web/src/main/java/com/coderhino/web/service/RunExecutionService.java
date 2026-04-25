@@ -3,6 +3,7 @@ package com.coderhino.web.service;
 import com.coderhino.query.ModelClient;
 import com.coderhino.query.ModelClientFactory;
 import com.coderhino.query.QueryEngine;
+import com.coderhino.server.LocalServerService;
 import com.coderhino.state.SessionStore;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.services.tasks.TaskOriginContext;
@@ -41,23 +42,24 @@ public class RunExecutionService {
     private final FileChangeTracker fileChangeTracker;
     private final WebSessionRegistry sessionRegistry;
     private final ServiceRegistry serviceRegistry;
+    private final com.coderhino.commands.CommandRegistry commandRegistry;
     private final CompletionNotificationStore completionNotificationStore;
     private final SessionStore sessionStore;
     private final java.util.Map<String, SseQueryEventSink> activeSinks = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Map<String, Thread> activeThreads = new java.util.concurrent.ConcurrentHashMap<>();
 
     public RunExecutionService(SessionEventBus eventBus, WebSessionRegistry sessionRegistry) {
-        this(eventBus, sessionRegistry, ServiceRegistry.createDefault(Path.of("").toAbsolutePath().normalize()), new CompletionNotificationStore());
+        this(eventBus, sessionRegistry, ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new LocalServerService()), new CompletionNotificationStore());
     }
 
     @Autowired
     public RunExecutionService(SessionEventBus eventBus, WebSessionRegistry sessionRegistry, ServiceRegistry serviceRegistry,
-                               CompletionNotificationStore completionNotificationStore) {
+                                CompletionNotificationStore completionNotificationStore) {
         this(eventBus, serviceRegistry.fileChangeTracker(), sessionRegistry, serviceRegistry, completionNotificationStore);
     }
 
     public RunExecutionService(SessionEventBus eventBus, FileChangeTracker fileChangeTracker, WebSessionRegistry sessionRegistry) {
-        this(eventBus, fileChangeTracker, sessionRegistry, ServiceRegistry.createDefault(Path.of("").toAbsolutePath().normalize()), new CompletionNotificationStore());
+        this(eventBus, fileChangeTracker, sessionRegistry, ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new LocalServerService()), new CompletionNotificationStore());
     }
 
     public RunExecutionService(SessionEventBus eventBus, FileChangeTracker fileChangeTracker,
@@ -67,6 +69,7 @@ public class RunExecutionService {
         this.fileChangeTracker = fileChangeTracker;
         this.sessionRegistry = sessionRegistry;
         this.serviceRegistry = serviceRegistry;
+        this.commandRegistry = com.coderhino.commands.CommandRegistry.createDefault(Path.of("").toAbsolutePath().normalize());
         this.completionNotificationStore = completionNotificationStore;
         this.sessionStore = sessionRegistry != null ? sessionRegistry.getSessionStore() : null;
     }
@@ -177,7 +180,8 @@ public class RunExecutionService {
             new com.coderhino.context.ContextCollector(),
             serviceRegistry,
             null,
-            WEB_RESPONSE_FORMAT_PROMPT
+            WEB_RESPONSE_FORMAT_PROMPT,
+            commandRegistry.asToolCommandRegistry()
         );
     }
 }

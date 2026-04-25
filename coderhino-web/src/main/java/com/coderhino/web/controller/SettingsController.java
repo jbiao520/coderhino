@@ -1,7 +1,7 @@
 package com.coderhino.web.controller;
 
-import com.coderhino.web.settings.SettingsPersistenceService;
-import com.coderhino.web.settings.WebSettings;
+import com.coderhino.config.settings.SettingsPersistenceService;
+import com.coderhino.config.settings.WebSettings;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

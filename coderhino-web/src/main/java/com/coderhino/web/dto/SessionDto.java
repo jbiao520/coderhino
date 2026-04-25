@@ -1,6 +1,6 @@
 package com.coderhino.web.dto;
 
-import com.coderhino.web.credentials.ApiCredentials;
+import com.coderhino.config.credentials.ApiCredentials;
 import com.coderhino.web.session.WebSession;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;

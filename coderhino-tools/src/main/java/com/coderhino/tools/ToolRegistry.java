@@ -113,6 +113,10 @@ public final class ToolRegistry {
         return new ToolRegistry(allTools);
     }
 
+    public static ToolRegistry createReadOnlyDefault() {
+        return createDefault().readOnly();
+    }
+
     public Optional<ToolDefinition<?, ?>> find(String name) {
         return Optional.ofNullable(tools.get(name));
     }
@@ -149,6 +153,28 @@ public final class ToolRegistry {
         var toolsWithSearch = new java.util.ArrayList<>(filteredTools);
         toolsWithSearch.add(new ToolSearchTool(filteredRegistry));
         return new ToolRegistry(toolsWithSearch);
+    }
+
+    public ToolRegistry readOnly() {
+        var readOnlyTools = tools.values().stream()
+            .filter(ToolDefinition::isReadOnly)
+            .toList();
+        return new ToolRegistry(readOnlyTools);
+    }
+
+    public ToolRegistry with(ToolDefinition<?, ?> tool) {
+        var next = new java.util.ArrayList<>(tools.values());
+        next.add(tool);
+        return new ToolRegistry(next);
+    }
+
+    public ToolRegistry withAll(Collection<? extends ToolDefinition<?, ?>> additionalTools) {
+        if (additionalTools == null || additionalTools.isEmpty()) {
+            return this;
+        }
+        var next = new java.util.ArrayList<>(tools.values());
+        next.addAll(additionalTools);
+        return new ToolRegistry(next);
     }
 
     public java.util.List<ToolSchema> toSchemas() {

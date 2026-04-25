@@ -1,7 +1,9 @@
 package com.coderhino.web.credentials;
 
 import com.coderhino.query.ProviderApiType;
-import com.coderhino.web.settings.SettingsPersistenceService;
+import com.coderhino.config.credentials.ApiCredentials;
+import com.coderhino.config.credentials.CredentialsPersistenceService;
+import com.coderhino.config.settings.SettingsPersistenceService;
 
 /**
  * Resolves provider-specific credentials for the web runtime.

@@ -11,7 +11,7 @@ import com.coderhino.web.exception.RunNotFoundException;
 import com.coderhino.web.exception.SessionBusyException;
 import com.coderhino.web.session.WebSession;
 import com.coderhino.web.session.WebSessionRegistry;
-import com.coderhino.web.settings.SettingsPersistenceService;
+import com.coderhino.config.settings.SettingsPersistenceService;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;

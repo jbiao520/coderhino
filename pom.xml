@@ -11,6 +11,28 @@
 
     <name>Coderhino</name>
     <description>CLI tool for AI-assisted coding</description>
+    <url>https://github.com/coderhino/coderhino</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>coderhino</id>
+            <name>Coderhino Contributors</name>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/coderhino/coderhino.git</connection>
+        <developerConnection>scm:git:https://github.com/coderhino/coderhino.git</developerConnection>
+        <url>https://github.com/coderhino/coderhino</url>
+    </scm>
 
     <modules>
         <module>frontend</module>
@@ -18,6 +40,8 @@
         <module>coderhino-commands</module>
         <module>coderhino-runtime-api</module>
         <module>coderhino-services</module>
+        <module>coderhino-agent-runtime</module>
+        <module>coderhino-agent-spring</module>
         <module>coderhino-backend</module>
         <module>coderhino-web</module>
     </modules>
@@ -33,6 +57,8 @@
         <maven.compiler.plugin.version>3.12.1</maven.compiler.plugin.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
         <maven.jar.plugin.version>3.4.1</maven.jar.plugin.version>
+        <maven.source.plugin.version>3.3.1</maven.source.plugin.version>
+        <maven.javadoc.plugin.version>3.6.3</maven.javadoc.plugin.version>
         <maven.resources.plugin.version>3.3.1</maven.resources.plugin.version>
         <frontend.maven.plugin.version>1.15.0</frontend.maven.plugin.version>
     </properties>
@@ -160,6 +186,22 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
                     <version>${maven.jar.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven.source.plugin.version}</version>
+                    <configuration>
+                        <excludeResources>true</excludeResources>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>${maven.javadoc.plugin.version}</version>
+                    <configuration>
+                        <doclint>none</doclint>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
