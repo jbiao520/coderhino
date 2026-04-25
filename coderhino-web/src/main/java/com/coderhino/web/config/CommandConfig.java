@@ -1,7 +1,7 @@
 package com.coderhino.web.config;
 
 import com.coderhino.commands.CommandRegistry;
-import com.coderhino.server.LocalServerService;
+import com.coderhino.server.NoOpServerService;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.state.AppState;
 import com.coderhino.state.BootstrapState;
@@ -25,7 +25,7 @@ public class CommandConfig {
 
     @Bean
     public ServiceRegistry serviceRegistry() {
-        return ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new LocalServerService());
+        return ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new NoOpServerService());
     }
 
     @Bean

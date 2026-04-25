@@ -3,7 +3,7 @@ package com.coderhino.web.service;
 import com.coderhino.query.ModelClient;
 import com.coderhino.query.ModelClientFactory;
 import com.coderhino.query.QueryEngine;
-import com.coderhino.server.LocalServerService;
+import com.coderhino.server.NoOpServerService;
 import com.coderhino.state.SessionStore;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.services.tasks.TaskOriginContext;
@@ -49,7 +49,7 @@ public class RunExecutionService {
     private final java.util.Map<String, Thread> activeThreads = new java.util.concurrent.ConcurrentHashMap<>();
 
     public RunExecutionService(SessionEventBus eventBus, WebSessionRegistry sessionRegistry) {
-        this(eventBus, sessionRegistry, ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new LocalServerService()), new CompletionNotificationStore());
+        this(eventBus, sessionRegistry, ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new NoOpServerService()), new CompletionNotificationStore());
     }
 
     @Autowired
@@ -59,7 +59,7 @@ public class RunExecutionService {
     }
 
     public RunExecutionService(SessionEventBus eventBus, FileChangeTracker fileChangeTracker, WebSessionRegistry sessionRegistry) {
-        this(eventBus, fileChangeTracker, sessionRegistry, ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new LocalServerService()), new CompletionNotificationStore());
+        this(eventBus, fileChangeTracker, sessionRegistry, ServiceRegistry.createAppDefault(Path.of("").toAbsolutePath().normalize(), new NoOpServerService()), new CompletionNotificationStore());
     }
 
     public RunExecutionService(SessionEventBus eventBus, FileChangeTracker fileChangeTracker,

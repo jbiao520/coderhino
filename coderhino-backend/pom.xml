@@ -48,6 +48,13 @@
             <version>${project.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.coderhino</groupId>
+            <artifactId>coderhino-web</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Picocli for CLI parsing with @Command annotations -->
         <dependency>
             <groupId>info.picocli</groupId>
@@ -66,50 +73,16 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>io.modelcontextprotocol.sdk</groupId>
-            <artifactId>mcp-core</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>io.modelcontextprotocol.sdk</groupId>
-            <artifactId>mcp-json-jackson2</artifactId>
-        </dependency>
-
-        <!-- Spring Boot Web (embedded Tomcat + Spring MVC) -->
+        <!-- Spring Boot launch support for LocalServerService. The web runtime
+             supplies servlet/websocket/security dependencies in coderhino-web. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-websocket</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.jetbrains.pty4j</groupId>
-            <artifactId>pty4j</artifactId>
-            <version>0.13.4</version>
-        </dependency>
-
-        <!-- Spring Boot Actuator (health, metrics endpoints) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-
-        <!-- Spring Security - needed to configure CSRF disabled for /api/** -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-
-        <!-- Flexmark HTML to Markdown converter -->
-        <dependency>
-            <groupId>com.vladsch.flexmark</groupId>
-            <artifactId>flexmark-html2md-converter</artifactId>
-            <version>0.64.8</version>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
         </dependency>
 
         <!-- ===== TEST DEPENDENCIES ===== -->
@@ -122,31 +95,12 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- WireMock for HTTP/SSE mock server (integration tests).
-             Jetty 11 deps (servlet/servlets/webapp) are pinned to 11.0.18 in
-             dependencyManagement above so the Spring Boot BOM does not upgrade
-             them to Jetty 12 where the servlet API moved packages. -->
         <dependency>
-            <groupId>org.wiremock</groupId>
-            <artifactId>wiremock</artifactId>
-            <version>3.3.1</version>
-            <scope>test</scope>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <scope>runtime</scope>
         </dependency>
 
-        <!-- Mockito for unit-level mock injection -->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>5.11.0</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Spring Boot Test (MockMvc, etc.) -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
@@ -183,6 +137,20 @@
                         </manifest>
                     </archive>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.coderhino.cli.Main</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

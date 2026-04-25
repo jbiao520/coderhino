@@ -28,12 +28,6 @@
 
         <dependency>
             <groupId>com.coderhino</groupId>
-            <artifactId>coderhino-backend</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.coderhino</groupId>
             <artifactId>coderhino-agent-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -41,6 +35,24 @@
         <dependency>
             <groupId>com.coderhino</groupId>
             <artifactId>coderhino-runtime-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.coderhino</groupId>
+            <artifactId>coderhino-services</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.coderhino</groupId>
+            <artifactId>coderhino-tools</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.coderhino</groupId>
+            <artifactId>coderhino-commands</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -126,7 +138,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.coderhino.cli.Main</mainClass>
+                            <mainClass>com.coderhino.web.CodeRhinoWebApplication</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -135,7 +147,8 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>com.coderhino.cli.Main</mainClass>
+                    <mainClass>com.coderhino.web.CodeRhinoWebApplication</mainClass>
+                    <classifier>exec</classifier>
                 </configuration>
                 <executions>
                     <execution>
