@@ -41,6 +41,7 @@
         <module>coderhino-runtime-api</module>
         <module>coderhino-services</module>
         <module>coderhino-agent-runtime</module>
+        <module>coderhino-external-consumer</module>
         <module>coderhino-agent-spring</module>
         <module>coderhino-backend</module>
         <module>coderhino-web</module>
