@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 
 @AutoConfiguration
 @EnableConfigurationProperties(CoderhinoAgentProperties.class)
@@ -40,10 +41,19 @@ public class CoderhinoAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ModelClient coderhinoModelClient(CoderhinoAgentProperties properties) {
+    public ModelClient coderhinoModelClient(CoderhinoAgentProperties properties, Environment environment) {
+        var apiKey = firstNonBlank(properties.getApiKey(), environment.getProperty("ANTHROPIC_API_KEY"));
+        if (apiKey == null) {
+            throw new IllegalStateException(
+                "Model API credentials are required. Set coderhino.agent.api-key, "
+                    + "CODERHINO_AGENT_API_KEY, ANTHROPIC_API_KEY, or inject a custom ModelClient "
+                    + "for local/test behavior."
+            );
+        }
+
         return ModelClientFactory.create(
             properties.getModel(),
-            properties.getApiKey(),
+            apiKey,
             properties.getApiBaseUrl(),
             properties.getProviderApiType().toRuntimeType(),
             properties.getContextWindow(),
@@ -80,5 +90,15 @@ public class CoderhinoAgentAutoConfiguration {
             builder.eventSink(sink);
         }
         return builder.build();
+    }
+
+    private static String firstNonBlank(String preferred, String fallback) {
+        if (preferred != null && !preferred.isBlank()) {
+            return preferred;
+        }
+        if (fallback != null && !fallback.isBlank()) {
+            return fallback;
+        }
+        return null;
     }
 }

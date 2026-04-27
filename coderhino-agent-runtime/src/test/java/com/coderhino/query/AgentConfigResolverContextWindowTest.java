@@ -63,4 +63,30 @@ class AgentConfigResolverContextWindowTest {
         assertEquals("MiniMax-M2.5", config.getModel());
         assertEquals(64000L, config.getContextWindow());
     }
+
+    @Test
+    void resolveSupportsOpenAiProviderWithDefaultBaseUrl(@TempDir Path tempDir) {
+        var credentialsService = new CredentialsPersistenceService(tempDir.resolve("api-credentials.json"));
+        var settingsService = new SettingsPersistenceService(tempDir.resolve("web-settings.json"));
+        var credentials = new ApiCredentials();
+        credentials.setDefaultProviderId("provider-1");
+        credentials.setProviders(List.of(
+            new ApiCredentials.ApiProvider(
+                "provider-1",
+                "OpenAI",
+                "secret",
+                null,
+                List.of(new ApiCredentials.ApiProvider.ModelConfig("gpt-4o", 128000L)),
+                ApiCredentials.ApiProvider.API_TYPE_OPENAI
+            )
+        ));
+        credentialsService.save(credentials);
+
+        var resolver = new AgentConfigResolver(credentialsService, settingsService);
+        var config = resolver.resolve();
+
+        assertEquals(ProviderApiType.OPENAI, config.getApiType());
+        assertEquals("https://api.openai.com", config.getBaseUrl());
+        assertEquals("gpt-4o", config.getModel());
+    }
 }

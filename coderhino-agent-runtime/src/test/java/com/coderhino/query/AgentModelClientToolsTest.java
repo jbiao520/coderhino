@@ -25,6 +25,7 @@ import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -158,15 +159,91 @@ class AgentModelClientToolsTest {
     }
 
     @Test
-    void modelClientFactoryRejectsOpenAiProvider() {
-        var exception = assertThrows(IllegalArgumentException.class, () -> ModelClientFactory.create(
+    void buildOpenAiPayloadMapsMessagesAndTools() {
+        var openAiClient = newOpenAiClient();
+        var tools = List.of(
+            new ToolSchema("glob", "Find files", Map.of("type", "object", "properties", Map.of("pattern", Map.of("type", "string"))))
+        );
+        List<com.coderhino.types.Message> messages = List.of(
+            new com.coderhino.types.Message.UserMessage("hi"),
+            new com.coderhino.types.Message.AssistantMessage("hello"),
+            new com.coderhino.types.Message.AssistantToolUseMessage("{\"pattern\":\"*.java\"}", "glob", "call-1"),
+            new com.coderhino.types.Message.ToolResultMessage("AgentModelClient.java", "glob", "call-1")
+        );
+        var request = new QueryRequest(messages, "system prompt", null, null, tools);
+
+        var payload = openAiClient.buildPayload(request, false);
+
+        assertEquals("gpt-4o", payload.get("model"));
+        assertEquals(false, payload.get("stream"));
+        assertEquals(4096L, payload.get("max_tokens"));
+        @SuppressWarnings("unchecked")
+        var openAiMessages = (List<Map<String, Object>>) payload.get("messages");
+        assertEquals("system", openAiMessages.get(0).get("role"));
+        assertEquals("system prompt", openAiMessages.get(0).get("content"));
+        assertEquals("user", openAiMessages.get(1).get("role"));
+        assertEquals("hi", openAiMessages.get(1).get("content"));
+        assertEquals("assistant", openAiMessages.get(2).get("role"));
+        assertEquals("hello", openAiMessages.get(2).get("content"));
+        assertEquals("assistant", openAiMessages.get(3).get("role"));
+        @SuppressWarnings("unchecked")
+        var toolCalls = (List<Map<String, Object>>) openAiMessages.get(3).get("tool_calls");
+        assertEquals("call-1", toolCalls.get(0).get("id"));
+        @SuppressWarnings("unchecked")
+        var function = (Map<String, Object>) toolCalls.get(0).get("function");
+        assertEquals("glob", function.get("name"));
+        assertEquals("{\"pattern\":\"*.java\"}", function.get("arguments"));
+        assertEquals("tool", openAiMessages.get(4).get("role"));
+        assertEquals("call-1", openAiMessages.get(4).get("tool_call_id"));
+        @SuppressWarnings("unchecked")
+        var openAiTools = (List<Map<String, Object>>) payload.get("tools");
+        assertEquals("function", openAiTools.get(0).get("type"));
+        @SuppressWarnings("unchecked")
+        var toolFunction = (Map<String, Object>) openAiTools.get(0).get("function");
+        assertEquals("glob", toolFunction.get("name"));
+        assertEquals("Find files", toolFunction.get("description"));
+        assertNotNull(toolFunction.get("parameters"));
+    }
+
+    @Test
+    void buildOpenAiPayloadOmitsEmptyTools() {
+        var payload = newOpenAiClient().buildPayload(
+            new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, List.of()),
+            false
+        );
+
+        assertFalse(payload.containsKey("tools"));
+    }
+
+    @Test
+    void completeOpenAiRequestUsesChatCompletionsUrlAndAuthorizationHeader() throws Exception {
+        var http = new FakeHttpClient();
+        http.enqueueResponse(new FakeHttpResponse<>(200, Stream.of(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}",
+            "",
+            "data: [DONE]",
+            ""
+        )));
+        var openAiClient = newOpenAiClient(http);
+
+        var response = openAiClient.complete(newBootstrapState(), new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null));
+
+        assertTrue(response instanceof ModelResponse.AssistantReply reply && reply.text().equals("ok"));
+        assertEquals(URI.create("https://api.openai.com/v1/chat/completions"), http.lastRequest.uri());
+        assertEquals(Optional.of("Bearer test-key"), http.lastRequest.headers().firstValue("Authorization"));
+        assertTrue(http.lastRequest.headers().firstValue("x-api-key").isEmpty());
+    }
+
+    @Test
+    void modelClientFactoryCreatesOpenAiProvider() {
+        var modelClient = ModelClientFactory.create(
             "model",
             "key",
             "https://api.openai.com",
             ProviderApiType.OPENAI
-        ));
+        );
 
-        assertTrue(exception.getMessage().contains("OpenAI-compatible requests are not supported in this release"));
+        assertNotNull(modelClient);
     }
 
     @Test
@@ -267,6 +344,78 @@ class AgentModelClientToolsTest {
         assertNotNull(usage);
         assertEquals(0, usage.cacheCreationTokens());
         assertEquals(0, usage.cacheReadTokens());
+    }
+
+    @Test
+    void parseOpenAiResponseBodyExtractsAssistantTextAndUsage() throws Exception {
+        var json = """
+            {
+              "choices": [{"message": {"role": "assistant", "content": "hello openai"}}],
+              "usage": {"prompt_tokens": 11, "completion_tokens": 7}
+            }
+            """;
+
+        var response = newOpenAiClient().parseResponseBody(json);
+
+        assertTrue(response instanceof ModelResponse.AssistantReply reply && reply.text().equals("hello openai"));
+        var usage = ((ModelResponse.AssistantReply) response).usage();
+        assertEquals(11, usage.inputTokens());
+        assertEquals(7, usage.outputTokens());
+        assertEquals(0, usage.cacheCreationTokens());
+        assertEquals(0, usage.cacheReadTokens());
+    }
+
+    @Test
+    void parseOpenAiResponseBodyExtractsToolCall() throws Exception {
+        var json = """
+            {
+              "choices": [{"message": {"role": "assistant", "tool_calls": [{
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "glob", "arguments": "{\\\"pattern\\\":\\\"*.java\\\"}"}
+              }]}}],
+              "usage": {"prompt_tokens": 3, "completion_tokens": 4}
+            }
+            """;
+
+        var response = newOpenAiClient().parseResponseBody(json);
+
+        assertTrue(response instanceof ModelResponse.ToolRequest toolRequest);
+        assertEquals("glob", ((ModelResponse.ToolRequest) response).toolName());
+        assertEquals("call-1", ((ModelResponse.ToolRequest) response).toolUseId());
+        assertEquals(Map.of("pattern", "*.java"), ((ModelResponse.ToolRequest) response).arguments());
+        assertEquals(3, ((ModelResponse.ToolRequest) response).usage().inputTokens());
+        assertEquals(4, ((ModelResponse.ToolRequest) response).usage().outputTokens());
+    }
+
+    @Test
+    void parseOpenAiResponseBodyPreservesMalformedToolArguments() throws Exception {
+        var json = """
+            {
+              "choices": [{"message": {"role": "assistant", "tool_calls": [{
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "glob", "arguments": "{bad-json"}
+              }]}}]
+            }
+            """;
+
+        var response = newOpenAiClient().parseResponseBody(json);
+
+        assertTrue(response instanceof ModelResponse.ToolRequest);
+        assertEquals(Map.of("raw", "{bad-json"), ((ModelResponse.ToolRequest) response).arguments());
+    }
+
+    @Test
+    void openAiHttpFailureReturnsProviderLabeledModelError() {
+        var http = new FakeHttpClient();
+        http.enqueueResponse(new FakeHttpResponse<>(400, Stream.of("bad request")));
+        var openAiClient = newOpenAiClient(http);
+
+        var response = openAiClient.complete(newBootstrapState(), new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null));
+
+        var error = assertInstanceOf(ModelResponse.ModelError.class, response);
+        assertTrue(error.message().contains("OpenAI API error (400): bad request"));
     }
 
     @Test
@@ -610,6 +759,72 @@ class AgentModelClientToolsTest {
     }
 
     @Test
+    void processOpenAiStreamLinesForwardsTextDeltasAndUsage() throws Exception {
+        var streamEvents = new CapturingModelStreamEventSink();
+
+        var response = newOpenAiClient().processStreamLines(newBootstrapState(), Stream.of(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"hel\"}}]}",
+            "",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2}}",
+            "",
+            "data: [DONE]",
+            ""
+        ), streamEvents);
+
+        assertTrue(response instanceof ModelResponse.AssistantReply reply && reply.text().equals("hello"));
+        assertEquals(List.of("hel", "lo"), streamEvents.textDeltas);
+        assertEquals(5, ((ModelResponse.AssistantReply) response).usage().inputTokens());
+        assertEquals(2, ((ModelResponse.AssistantReply) response).usage().outputTokens());
+        assertTrue(streamEvents.usageSnapshots.contains(new UsageSnapshot(5, 2, 0, 0)));
+    }
+
+    @Test
+    void processOpenAiStreamLinesAccumulatesToolCallDeltas() throws Exception {
+        var streamEvents = new CapturingModelStreamEventSink();
+
+        var response = newOpenAiClient().processStreamLines(newBootstrapState(), Stream.of(
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"glob\",\"arguments\":\"{\\\"pattern\\\":\"}}]}}]}",
+            "",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"*.java\\\"}\"}}]}}]}",
+            "",
+            "data: [DONE]",
+            ""
+        ), streamEvents);
+
+        assertTrue(response instanceof ModelResponse.ToolRequest);
+        assertEquals("glob", ((ModelResponse.ToolRequest) response).toolName());
+        assertEquals("call-1", ((ModelResponse.ToolRequest) response).toolUseId());
+        assertEquals(Map.of("pattern", "*.java"), ((ModelResponse.ToolRequest) response).arguments());
+        assertEquals(List.of(
+            new ToolInputDelta("glob", "call-1", "{\"pattern\":"),
+            new ToolInputDelta("glob", "call-1", "\"*.java\"}")
+        ), streamEvents.toolInputDeltas);
+    }
+
+    @Test
+    void completeOpenAiFallsBackWhenStreamingToolInputIsIncomplete() {
+        var httpClient = new FakeHttpClient();
+        httpClient.enqueueResponse(new FakeHttpResponse<>(200, Stream.of(
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"glob\",\"arguments\":\"{\\\"pattern\\\":\"}}]}}]}",
+            "",
+            "data: [DONE]",
+            ""
+        )));
+        httpClient.enqueueResponse(new FakeHttpResponse<>(200, "{" +
+            "\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"fallback ok\"}}]," +
+            "\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2}" +
+            "}"));
+        var openAiClient = newOpenAiClient(httpClient);
+
+        var response = openAiClient.complete(newBootstrapState(), new QueryRequest(List.of(new com.coderhino.types.Message.UserMessage("hi")), "system", null, null, null));
+
+        assertTrue(response instanceof ModelResponse.AssistantReply reply && reply.text().equals("fallback ok"));
+        assertEquals(2, httpClient.sentRequests.size());
+        assertTrue(httpClient.sentBodies.get(0).contains("\"stream\":true"));
+        assertTrue(httpClient.sentBodies.get(1).contains("\"stream\":false"));
+    }
+
+    @Test
     void processStreamLinesPreservesToolInputAcrossRecoverableIncompleteEvent() throws Exception {
         var streamEvents = new CapturingModelStreamEventSink();
 
@@ -848,6 +1063,23 @@ class AgentModelClientToolsTest {
         ));
     }
 
+    private static AgentModelClient newOpenAiClient() {
+        return newOpenAiClient(HttpClient.newHttpClient());
+    }
+
+    private static AgentModelClient newOpenAiClient(HttpClient httpClient) {
+        return new AgentModelClient(
+            httpClient,
+            new ObjectMapper(),
+            "https://api.openai.com",
+            "test-key",
+            "gpt-4o",
+            ProviderApiType.OPENAI,
+            128000L,
+            4096L
+        );
+    }
+
     private static ListAppender<ILoggingEvent> attachLogs() {
         var logger = (Logger) LoggerFactory.getLogger(AgentModelClient.class);
         var appender = new ListAppender<ILoggingEvent>();
@@ -863,6 +1095,7 @@ class AgentModelClientToolsTest {
     }
 
     private static final class CapturingModelStreamEventSink implements ModelStreamEventSink {
+        private final List<String> textDeltas = new ArrayList<>();
         private final List<String> thinkingDeltas = new ArrayList<>();
         private final List<ToolInputDelta> toolInputDeltas = new ArrayList<>();
         private final List<UsageSnapshot> usageSnapshots = new ArrayList<>();
@@ -870,6 +1103,7 @@ class AgentModelClientToolsTest {
 
         @Override
         public void onTextDelta(String text) {
+            textDeltas.add(text);
         }
 
         @Override
@@ -901,6 +1135,9 @@ class AgentModelClientToolsTest {
 
     private static final class FakeHttpClient extends HttpClient {
         private final ArrayDeque<Object> queuedResponses = new ArrayDeque<>();
+        private final List<HttpRequest> sentRequests = new ArrayList<>();
+        private final List<String> sentBodies = new ArrayList<>();
+        private HttpRequest lastRequest;
 
         void enqueueResponse(HttpResponse<?> response) {
             queuedResponses.addLast(response);
@@ -913,6 +1150,9 @@ class AgentModelClientToolsTest {
         @Override
         @SuppressWarnings("unchecked")
         public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) throws IOException {
+            lastRequest = request;
+            sentRequests.add(request);
+            sentBodies.add(readBody(request));
             var next = queuedResponses.removeFirst();
             if (next instanceof IOException ioException) {
                 throw ioException;
@@ -921,6 +1161,12 @@ class AgentModelClientToolsTest {
                 throw runtimeException;
             }
             return (HttpResponse<T>) next;
+        }
+
+        private String readBody(HttpRequest request) {
+            return request.bodyPublisher()
+                .map(BodyCollector::collect)
+                .orElse("");
         }
 
         @Override
@@ -976,6 +1222,45 @@ class AgentModelClientToolsTest {
         @Override
         public Optional<Executor> executor() {
             return Optional.empty();
+        }
+    }
+
+    private static final class BodyCollector implements java.util.concurrent.Flow.Subscriber<java.nio.ByteBuffer> {
+        private final StringBuilder body = new StringBuilder();
+        private final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+
+        static String collect(HttpRequest.BodyPublisher publisher) {
+            var collector = new BodyCollector();
+            publisher.subscribe(collector);
+            try {
+                collector.done.await();
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(exception);
+            }
+            return collector.body.toString();
+        }
+
+        @Override
+        public void onSubscribe(java.util.concurrent.Flow.Subscription subscription) {
+            subscription.request(Long.MAX_VALUE);
+        }
+
+        @Override
+        public void onNext(java.nio.ByteBuffer item) {
+            var bytes = new byte[item.remaining()];
+            item.get(bytes);
+            body.append(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            done.countDown();
+        }
+
+        @Override
+        public void onComplete() {
+            done.countDown();
         }
     }
 

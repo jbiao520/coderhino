@@ -38,9 +38,6 @@ public final class ModelClientFactory {
     }
 
     public static ModelClient create(String model, String apiKey, String baseUrl, ProviderApiType apiType, long contextWindow, long maxOutputTokens) {
-        if (apiType == ProviderApiType.OPENAI) {
-            throw ProviderApiType.unsupportedOpenAi();
-        }
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException("Model API credentials are required. Set ANTHROPIC_API_KEY or inject a custom ModelClient for local/test behavior.");
         }

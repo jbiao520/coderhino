@@ -3,12 +3,14 @@ package com.coderhino.web.service;
 import com.coderhino.query.ModelClient;
 import com.coderhino.query.ModelClientFactory;
 import com.coderhino.query.QueryEngine;
+import com.coderhino.query.QueryResult;
 import com.coderhino.server.NoOpServerService;
 import com.coderhino.state.SessionStore;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.services.tasks.TaskOriginContext;
 import com.coderhino.services.summary.FileChangeTracker;
 import com.coderhino.tools.ToolRegistry;
+import com.coderhino.types.Message;
 import com.coderhino.web.credentials.ProviderConfigResolver;
 import com.coderhino.web.dto.RunDto;
 import com.coderhino.web.events.SessionEventBus;
@@ -90,13 +92,14 @@ public class RunExecutionService {
             var config = createProviderConfigResolver().resolve(session.getProviderId(), session.getAppState().model());
             var modelClient = createModelClient(config);
             var engine = createQueryEngine(config, modelClient);
-            com.coderhino.query.QueryResult result;
+            QueryResult result;
             try (var ignored = TaskOriginContext.open(projectId, session.getSessionId())) {
                 result = engine.execute(session.getBootstrapState(), input, visiblePrompt, sink);
             }
             if (sink.isCancelled()) {
                 return;
             }
+            persistTerminalErrorMessage(session, result);
             if (runId.equals(session.getActiveRunId())) {
                 completionNotificationStore.recordAiRunCompletion(runId, session.getSessionId(), projectId, java.time.Instant.now());
                 session.setCurrentRunStatus(result.isError() ? RunDto.RunStatus.FAILED : RunDto.RunStatus.COMPLETED);
@@ -183,5 +186,22 @@ public class RunExecutionService {
             WEB_RESPONSE_FORMAT_PROMPT,
             commandRegistry.asToolCommandRegistry()
         );
+    }
+
+    private static void persistTerminalErrorMessage(WebSession session, QueryResult result) {
+        if (session == null || result == null || !result.isError()) {
+            return;
+        }
+        var text = result.text();
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        var messages = session.getAppState().messages();
+        if (!messages.isEmpty()
+            && messages.get(messages.size() - 1) instanceof Message.AssistantMessage assistantMessage
+            && assistantMessage.content().equals(text)) {
+            return;
+        }
+        session.getBootstrapState().addMessage(new Message.AssistantMessage(text));
     }
 }

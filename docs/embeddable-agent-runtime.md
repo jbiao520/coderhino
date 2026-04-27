@@ -31,9 +31,9 @@ Hosts must explicitly provide a broader `ToolRegistry`, call `enabledBuiltInTool
 
 ## Provider And Credentials
 
-The first SDK release supports the Anthropic-compatible message request format used by `ProviderApiType.CLAUDE_CODE`. `ProviderApiType.OPENAI` is rejected with a clear error because OpenAI-compatible request payloads are not implemented in this release.
+The runtime supports the Anthropic-compatible message request format used by `ProviderApiType.CLAUDE_CODE` and OpenAI-compatible Chat Completions requests used by `ProviderApiType.OPENAI`. `CLAUDE_CODE` sends requests to `/v1/messages` with Anthropic headers and defaults to `https://api.anthropic.com`. `OPENAI` sends requests to `/v1/chat/completions` with a bearer token and defaults to `https://api.openai.com`.
 
-Default production model-client creation requires credentials. Set `ANTHROPIC_API_KEY`, pass credentials through the builder, or inject a host-owned `ModelClient`. Local echo or fake model behavior is only available by explicitly injecting a `ModelClient`; it is not used silently when credentials are missing.
+Default production model-client creation requires credentials. Set `ANTHROPIC_API_KEY` for the default Claude Code path, pass credentials through the builder, or inject a host-owned `ModelClient`. Local echo or fake model behavior is only available by explicitly injecting a `ModelClient`; it is not used silently when credentials are missing.
 
 `contextWindow` and `maxOutputTokens` are separate settings. Context window is retained as model metadata for validation/accounting, while `maxOutputTokens` controls the provider output-token field such as Anthropic `max_tokens`. The default `maxOutputTokens` is `128000`.
 
@@ -42,6 +42,18 @@ CoderhinoAgent agent = CoderhinoAgent.builder()
     .apiKey(System.getenv("ANTHROPIC_API_KEY"))
     .apiBaseUrl("https://api.anthropic.com")
     .contextWindow(128000)
+    .maxOutputTokens(4096)
+    .build();
+```
+
+OpenAI-compatible configuration:
+
+```java
+CoderhinoAgent agent = CoderhinoAgent.builder()
+    .model("gpt-4o")
+    .apiKey(System.getenv("OPENAI_API_KEY"))
+    .apiBaseUrl("https://api.openai.com")
+    .providerApiType(ProviderApiType.OPENAI)
     .maxOutputTokens(4096)
     .build();
 ```
@@ -94,6 +106,8 @@ Host applications can override `ModelClient`, `ToolRegistry`, `ServiceRegistry`,
 
 The Spring module is optional and is not part of the first plain Java runtime publication scope. When used, it mirrors the hardened embedded defaults and backs off for host-provided beans.
 
+The repository also includes `coderhino-external-consumer-spring`, a verification-only sample that consumes `coderhino-agent-spring` from the root reactor. It is not part of the public runtime boundary and intentionally does not depend on `coderhino-backend` or `coderhino-web`.
+
 ## Publication Checks
 
 The first-release library modules attach source and javadoc jars during `verify` and `install`:
@@ -115,3 +129,11 @@ mvn -pl coderhino-external-consumer -am test
 ```
 
 The external consumer depends only on `com.coderhino:coderhino-agent-runtime` and creates a `CoderhinoAgent` with an injected `ModelClient`, so it does not require API credentials during verification.
+
+Spring-based consumption can be verified separately through the matching verification module:
+
+```bash
+mvn -pl coderhino-external-consumer-spring -am test
+```
+
+That Spring verification module depends on `com.coderhino:coderhino-agent-spring`, instantiates the real `ModelClient` through Spring auto-configuration, and keeps the verification path outside the public runtime library set. Its test sets a local `coderhino.agent.api-key` and stops at context creation, so verification stays local without mocking the client.

@@ -47,6 +47,26 @@ class CoderhinoAgentAutoConfigurationTest {
     }
 
     @Test
+    void missingCredentialsFailureNamesSpringConfigurationOptions() {
+        contextRunner
+            .run(context -> assertThat(context).hasFailed()
+                .getFailure()
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .hasMessageContaining("coderhino.agent.api-key")
+                .hasMessageContaining("CODERHINO_AGENT_API_KEY")
+                .hasMessageContaining("ANTHROPIC_API_KEY")
+                .hasMessageContaining("custom ModelClient"));
+    }
+
+    @Test
+    void usesAnthropicApiKeyFallbackWhenSpringPropertyIsUnset() {
+        contextRunner
+            .withPropertyValues("ANTHROPIC_API_KEY=test-key")
+            .run(context -> assertThat(context).hasSingleBean(ModelClient.class));
+    }
+
+    @Test
     void customBeansOverrideDefaults() {
         contextRunner
             .withUserConfiguration(CustomBeans.class)
@@ -89,11 +109,13 @@ class CoderhinoAgentAutoConfigurationTest {
     }
 
     @Test
-    void openAiProviderFailsClearly() {
+    void openAiProviderCreatesModelClient() {
         contextRunner
             .withPropertyValues("coderhino.agent.api-key=test-key", "coderhino.agent.provider-api-type=OPENAI")
-            .run(context -> assertThat(context.getStartupFailure())
-                .hasMessageContaining("OpenAI-compatible requests are not supported in this release"));
+            .run(context -> {
+                assertThat(context.getStartupFailure()).isNull();
+                assertThat(context).hasSingleBean(ModelClient.class);
+            });
     }
 
     @Configuration(proxyBeanMethods = false)

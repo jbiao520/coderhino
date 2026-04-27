@@ -37,6 +37,7 @@ public final class AgentModelClient implements ModelClient {
     private final String baseUrl;
     private final String apiKey;
     private final String model;
+    private final ProviderApiType apiType;
     private final long contextWindow;
     private final long maxOutputTokens;
 
@@ -62,9 +63,6 @@ public final class AgentModelClient implements ModelClient {
         long contextWindow,
         long maxOutputTokens
     ) {
-        if (apiType == ProviderApiType.OPENAI) {
-            throw ProviderApiType.unsupportedOpenAi();
-        }
         if (httpClient == null) throw new IllegalArgumentException("httpClient must not be null");
         if (objectMapper == null) throw new IllegalArgumentException("objectMapper must not be null");
         if (baseUrl == null || baseUrl.isBlank()) throw new IllegalArgumentException("baseUrl must not be null or blank");
@@ -75,6 +73,7 @@ public final class AgentModelClient implements ModelClient {
         this.baseUrl = stripTrailingSlash(baseUrl);
         this.apiKey = apiKey;
         this.model = model;
+        this.apiType = apiType == null ? ProviderApiType.CLAUDE_CODE : apiType;
         this.contextWindow = contextWindow > 0 ? contextWindow : DEFAULT_CONTEXT_WINDOW;
         this.maxOutputTokens = maxOutputTokens > 0 ? maxOutputTokens : DEFAULT_MAX_OUTPUT_TOKENS;
     }
@@ -111,7 +110,8 @@ public final class AgentModelClient implements ModelClient {
                     if (retryReason != null && attempt < MAX_ATTEMPTS) {
                         emitRetryStatus(streamSink, attempt + 1, retryReason);
                         log.warn(
-                            "Anthropic request returned retryable status {} on attempt {} of {}. Retrying.",
+                            "{} request returned retryable status {} on attempt {} of {}. Retrying.",
+                            providerLabel(),
                             streamResponse.statusCode(),
                             attempt,
                             MAX_ATTEMPTS
@@ -119,14 +119,15 @@ public final class AgentModelClient implements ModelClient {
                         continue;
                     }
                     log.error(
-                        "Anthropic request returned error status {} on attempt {} of {} body={}",
+                        "{} request returned error status {} on attempt {} of {} body={}",
+                        providerLabel(),
                         streamResponse.statusCode(),
                         attempt,
                         MAX_ATTEMPTS,
                         QueryLogFormatter.summarizeContent(errorBody)
                     );
                     return new ModelResponse.ModelError(
-                        "Anthropic API error (%d): %s".formatted(streamResponse.statusCode(), errorBody)
+                        "%s API error (%d): %s".formatted(providerLabel(), streamResponse.statusCode(), errorBody)
                     );
                 }
 
@@ -134,7 +135,8 @@ public final class AgentModelClient implements ModelClient {
                     return processStreamLines(bootstrapState, streamResponse.body(), streamSink);
                 } catch (Exception streamException) {
                     log.warn(
-                        "Anthropic streaming response processing failed on attempt {} of {}. Falling back to non-streaming request.",
+                        "{} streaming response processing failed on attempt {} of {}. Falling back to non-streaming request.",
+                        providerLabel(),
                         attempt,
                         MAX_ATTEMPTS,
                         streamException
@@ -145,14 +147,15 @@ public final class AgentModelClient implements ModelClient {
                     recordRawHistory(bootstrapState, "response", fallbackResponse.body());
                     if (fallbackResponse.statusCode() >= 400) {
                         log.error(
-                            "Anthropic fallback request returned error status {} on attempt {} of {} body={}",
+                            "{} fallback request returned error status {} on attempt {} of {} body={}",
+                            providerLabel(),
                             fallbackResponse.statusCode(),
                             attempt,
                             MAX_ATTEMPTS,
                             QueryLogFormatter.summarizeContent(fallbackResponse.body())
                         );
                         return new ModelResponse.ModelError(
-                            "Anthropic API error (%d): %s".formatted(fallbackResponse.statusCode(), fallbackResponse.body())
+                            "%s API error (%d): %s".formatted(providerLabel(), fallbackResponse.statusCode(), fallbackResponse.body())
                         );
                     }
                     return parseResponseBody(fallbackResponse.body());
@@ -162,9 +165,9 @@ public final class AgentModelClient implements ModelClient {
                 var retryReason = retryReasonForException(exception);
                 if (retryReason != null && attempt < MAX_ATTEMPTS) {
                     emitRetryStatus(streamSink, attempt + 1, retryReason);
-                    log.warn("Anthropic request attempt {} of {} failed. Retrying.", attempt, MAX_ATTEMPTS, exception);
+                    log.warn("{} request attempt {} of {} failed. Retrying.", providerLabel(), attempt, MAX_ATTEMPTS, exception);
                 } else if (attempt < MAX_ATTEMPTS) {
-                    log.warn("Anthropic request attempt {} of {} failed.", attempt, MAX_ATTEMPTS, exception);
+                    log.warn("{} request attempt {} of {} failed.", providerLabel(), attempt, MAX_ATTEMPTS, exception);
                 }
                 if (attempt >= MAX_ATTEMPTS) {
                     break;
@@ -173,30 +176,31 @@ public final class AgentModelClient implements ModelClient {
         }
 
         if (lastException != null) {
-            log.error("Anthropic request failed after {} attempts", MAX_ATTEMPTS, lastException);
-            return new ModelResponse.ModelError("Anthropic request failed: %s".formatted(lastException.getMessage()));
+            log.error("{} request failed after {} attempts", providerLabel(), MAX_ATTEMPTS, lastException);
+            return new ModelResponse.ModelError("%s request failed: %s".formatted(providerLabel(), lastException.getMessage()));
         }
         if (lastErrorBody != null) {
             log.error(
-                "Anthropic request failed after {} attempts body={}",
+                "{} request failed after {} attempts body={}",
+                providerLabel(),
                 MAX_ATTEMPTS,
                 QueryLogFormatter.summarizeContent(lastErrorBody)
             );
-            return new ModelResponse.ModelError("Anthropic request failed: %s".formatted(lastErrorBody));
+            return new ModelResponse.ModelError("%s request failed: %s".formatted(providerLabel(), lastErrorBody));
         }
-        return new ModelResponse.ModelError("Anthropic request failed.");
+        return new ModelResponse.ModelError("%s request failed.".formatted(providerLabel()));
     }
 
     private HttpResponse<Stream<String>> sendStreamingRequest(Map<String, Object> payload) throws Exception {
-        var httpRequest = HttpRequest.newBuilder()
-            .uri(URI.create(baseUrl + "/v1/messages"))
+        var requestBuilder = HttpRequest.newBuilder()
+            .uri(URI.create(requestUrl()))
             .timeout(REQUEST_TIMEOUT)
-            .header("content-type", "application/json")
-            .header("x-api-key", apiKey)
-            .header("anthropic-version", "2023-06-01")
-            .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
-            .build();
-        return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofLines());
+            .header("content-type", "application/json");
+        applyAuthHeaders(requestBuilder);
+        return httpClient.send(
+            requestBuilder.POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload))).build(),
+            HttpResponse.BodyHandlers.ofLines()
+        );
     }
 
     ModelResponse processStreamLines(BootstrapState bootstrapState, Stream<String> lines) throws Exception {
@@ -204,6 +208,13 @@ public final class AgentModelClient implements ModelClient {
     }
 
     ModelResponse processStreamLines(BootstrapState bootstrapState, Stream<String> lines, ModelStreamEventSink streamSink) throws Exception {
+        if (apiType == ProviderApiType.OPENAI) {
+            return processOpenAiStreamLines(bootstrapState, lines, streamSink);
+        }
+        return processClaudeCodeStreamLines(bootstrapState, lines, streamSink);
+    }
+
+    private ModelResponse processClaudeCodeStreamLines(BootstrapState bootstrapState, Stream<String> lines, ModelStreamEventSink streamSink) throws Exception {
         var rawStream = new StringBuilder();
         var state = new StreamingParseState();
         String currentEvent = null;
@@ -243,26 +254,42 @@ public final class AgentModelClient implements ModelClient {
     }
 
     private HttpResponse<String> sendRequest(Map<String, Object> payload) throws Exception {
-        var httpRequest = HttpRequest.newBuilder()
-            .uri(URI.create(baseUrl + "/v1/messages"))
+        var requestBuilder = HttpRequest.newBuilder()
+            .uri(URI.create(requestUrl()))
             .timeout(REQUEST_TIMEOUT)
-            .header("content-type", "application/json")
-            .header("x-api-key", apiKey)
-            .header("anthropic-version", "2023-06-01")
-            .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
-            .build();
+            .header("content-type", "application/json");
+        applyAuthHeaders(requestBuilder);
 
-        return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+        return httpClient.send(
+            requestBuilder.POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload))).build(),
+            HttpResponse.BodyHandlers.ofString()
+        );
+    }
+
+    private String requestUrl() {
+        return switch (apiType) {
+            case OPENAI -> baseUrl + "/v1/chat/completions";
+            case CLAUDE_CODE -> baseUrl + "/v1/messages";
+        };
+    }
+
+    private void applyAuthHeaders(HttpRequest.Builder requestBuilder) {
+        switch (apiType) {
+            case OPENAI -> requestBuilder.header("Authorization", "Bearer " + apiKey);
+            case CLAUDE_CODE -> requestBuilder
+                .header("x-api-key", apiKey)
+                .header("anthropic-version", "2023-06-01");
+        }
     }
 
     ModelResponse parseResponseBody(String body) throws Exception {
         var root = objectMapper.readTree(body);
         var usage = extractUsage(root);
-        var toolRequest = extractToolRequest(root);
+        var toolRequest = apiType == ProviderApiType.OPENAI ? extractOpenAiToolRequest(root) : extractToolRequest(root);
         if (toolRequest != null) {
             return new ModelResponse.ToolRequest(toolRequest.toolName(), toolRequest.arguments(), toolRequest.toolUseId(), usage);
         }
-        return new ModelResponse.AssistantReply(extractText(root), usage);
+        return new ModelResponse.AssistantReply(apiType == ProviderApiType.OPENAI ? extractOpenAiText(root) : extractText(root), usage);
     }
 
     ModelResponse parseStreamBody(String body) throws Exception {
@@ -285,7 +312,8 @@ public final class AgentModelClient implements ModelClient {
             node = objectMapper.readTree(data);
         } catch (JsonEOFException exception) {
             log.debug(
-                "Skipping incomplete Anthropic SSE event event={} data={}",
+                "Skipping incomplete {} SSE event event={} data={}",
+                providerLabel(),
                 currentEvent,
                 QueryLogFormatter.summarizeContent(data),
                 exception
@@ -457,11 +485,128 @@ public final class AgentModelClient implements ModelClient {
         private boolean sawCacheReadTokens;
     }
 
+    private ModelResponse processOpenAiStreamLines(BootstrapState bootstrapState, Stream<String> lines, ModelStreamEventSink streamSink) throws Exception {
+        var rawStream = new StringBuilder();
+        var state = new StreamingParseState();
+        var toolStates = new LinkedHashMap<Integer, OpenAiToolCallStreamState>();
+
+        try {
+            for (String line : (Iterable<String>) lines::iterator) {
+                if (rawStream.length() > 0) {
+                    rawStream.append('\n');
+                }
+                rawStream.append(line);
+                if (!line.startsWith("data:")) {
+                    continue;
+                }
+                var data = line.substring("data:".length()).trim();
+                if ("[DONE]".equals(data)) {
+                    break;
+                }
+                processOpenAiStreamData(data, state, toolStates, streamSink);
+            }
+        } finally {
+            recordRawHistory(bootstrapState, "response", rawStream.toString());
+        }
+
+        applyFirstOpenAiToolCall(state, toolStates);
+        return toModelResponse(state);
+    }
+
+    private void processOpenAiStreamData(String data, StreamingParseState state, Map<Integer, OpenAiToolCallStreamState> toolStates, ModelStreamEventSink streamSink) throws Exception {
+        JsonNode node;
+        try {
+            node = objectMapper.readTree(data);
+        } catch (JsonEOFException exception) {
+            log.debug(
+                "Skipping incomplete {} SSE event data={}",
+                providerLabel(),
+                QueryLogFormatter.summarizeContent(data),
+                exception
+            );
+            return;
+        }
+
+        applyOpenAiUsage(node.path("usage"), state, streamSink);
+        var choices = node.path("choices");
+        if (!choices.isArray()) {
+            return;
+        }
+        for (JsonNode choice : choices) {
+            var delta = choice.path("delta");
+            if (!delta.isObject()) {
+                continue;
+            }
+            if (delta.has("content") && !delta.path("content").isNull()) {
+                var chunk = delta.path("content").asText();
+                state.text.append(chunk);
+                if (!chunk.isEmpty()) {
+                    streamSink.onTextDelta(chunk);
+                }
+            }
+            var toolCalls = delta.path("tool_calls");
+            if (toolCalls.isArray()) {
+                for (JsonNode toolCall : toolCalls) {
+                    applyOpenAiToolCallDelta(toolCall, toolStates, streamSink);
+                }
+            }
+        }
+    }
+
+    private void applyOpenAiToolCallDelta(JsonNode toolCall, Map<Integer, OpenAiToolCallStreamState> toolStates, ModelStreamEventSink streamSink) {
+        var index = toolCall.path("index").asInt(toolStates.size());
+        var toolState = toolStates.computeIfAbsent(index, ignored -> new OpenAiToolCallStreamState());
+        if (toolCall.has("id") && !toolCall.path("id").isNull()) {
+            toolState.id = toolCall.path("id").asText();
+        }
+        var functionNode = toolCall.path("function");
+        if (!functionNode.isObject()) {
+            return;
+        }
+        if (functionNode.has("name") && !functionNode.path("name").isNull()) {
+            toolState.name.append(functionNode.path("name").asText());
+        }
+        if (functionNode.has("arguments") && !functionNode.path("arguments").isNull()) {
+            var partial = functionNode.path("arguments").asText("");
+            toolState.arguments.append(partial);
+            if (toolState.name.length() > 0) {
+                streamSink.onToolInputDelta(toolState.name.toString(), toolState.id, partial);
+            }
+        }
+    }
+
+    private void applyFirstOpenAiToolCall(StreamingParseState state, Map<Integer, OpenAiToolCallStreamState> toolStates) {
+        for (OpenAiToolCallStreamState toolState : toolStates.values()) {
+            if (toolState.name.length() == 0) {
+                continue;
+            }
+            state.toolName = toolState.name.toString();
+            state.toolUseId = toolState.id;
+            state.toolInputJson.setLength(0);
+            state.toolInputJson.append(toolState.arguments);
+            state.toolArguments = Map.of();
+            return;
+        }
+    }
+
+    private static final class OpenAiToolCallStreamState {
+        private String id;
+        private final StringBuilder name = new StringBuilder();
+        private final StringBuilder arguments = new StringBuilder();
+    }
+
     Map<String, Object> buildPayload(QueryRequest request) {
         return buildPayload(request, true);
     }
 
     Map<String, Object> buildPayload(QueryRequest request, boolean stream) {
+        if (apiType == ProviderApiType.OPENAI) {
+            return buildOpenAiPayload(request, stream);
+        }
+        return buildClaudeCodePayload(request, stream);
+    }
+
+    private Map<String, Object> buildClaudeCodePayload(QueryRequest request, boolean stream) {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("model", model);
         payload.put("max_tokens", maxOutputTokens);
@@ -487,8 +632,34 @@ public final class AgentModelClient implements ModelClient {
         return payload;
     }
 
+    private Map<String, Object> buildOpenAiPayload(QueryRequest request, boolean stream) {
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("model", model);
+        payload.put("max_tokens", maxOutputTokens);
+        payload.put("stream", stream);
+        payload.put("messages", toOpenAiMessages(request));
+
+        if (request.tools() != null && !request.tools().isEmpty()) {
+            payload.put("tools", request.tools().stream()
+                .map(t -> {
+                    var function = new LinkedHashMap<String, Object>();
+                    function.put("name", t.name());
+                    function.put("description", t.description());
+                    function.put("parameters", t.inputSchema());
+                    var toolMap = new LinkedHashMap<String, Object>();
+                    toolMap.put("type", "function");
+                    toolMap.put("function", function);
+                    return toolMap;
+                })
+                .toList());
+        }
+
+        return payload;
+    }
+
     private List<Map<String, Object>> toAgenticMessages(List<Message> history) {
         var result = new ArrayList<Map<String, Object>>();
+        history = history == null ? List.of() : history;
         var resolvedToolUseIds = resolvedToolUseIds(history);
         for (Message message : history) {
             if (message instanceof Message.UserMessage userMessage) {
@@ -516,6 +687,77 @@ public final class AgentModelClient implements ModelClient {
             }
         }
         return resolved;
+    }
+
+    private List<Map<String, Object>> toOpenAiMessages(QueryRequest request) {
+        var result = new ArrayList<Map<String, Object>>();
+        if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+            result.add(openAiTextMessage("system", request.systemPrompt()));
+        }
+        var history = request.messages() == null ? List.<Message>of() : request.messages();
+        var resolvedToolUseIds = resolvedToolUseIds(history);
+        for (Message message : history) {
+            if (message instanceof Message.UserMessage userMessage) {
+                result.add(openAiTextMessage("user", userMessage.content()));
+            } else if (message instanceof Message.AssistantMessage assistantMessage) {
+                result.add(openAiTextMessage("assistant", assistantMessage.content()));
+            } else if (message instanceof Message.AssistantToolUseMessage toolUseMessage) {
+                if (isResolvedToolUse(toolUseMessage, resolvedToolUseIds)) {
+                    result.add(openAiAssistantToolUseMessage(toolUseMessage));
+                }
+            } else if (message instanceof Message.ToolResultMessage toolResultMessage) {
+                if (toolResultMessage.toolUseId() != null && !toolResultMessage.toolUseId().isBlank()) {
+                    result.add(openAiToolResultMessage(toolResultMessage));
+                }
+            }
+        }
+        return result;
+    }
+
+    private boolean isResolvedToolUse(Message.AssistantToolUseMessage toolUseMessage, Set<String> resolvedToolUseIds) {
+        return toolUseMessage.toolUseId() != null
+            && !toolUseMessage.toolUseId().isBlank()
+            && resolvedToolUseIds.contains(toolUseMessage.toolUseId());
+    }
+
+    private Map<String, Object> openAiTextMessage(String role, String content) {
+        var message = new LinkedHashMap<String, Object>();
+        message.put("role", role);
+        message.put("content", content == null ? "" : content);
+        return message;
+    }
+
+    private Map<String, Object> openAiAssistantToolUseMessage(Message.AssistantToolUseMessage toolUseMessage) {
+        var function = new LinkedHashMap<String, Object>();
+        function.put("name", toolUseMessage.toolName());
+        function.put("arguments", normalizeToolArgumentsJson(toolUseMessage.content()));
+
+        var toolCall = new LinkedHashMap<String, Object>();
+        toolCall.put("id", toolUseMessage.toolUseId());
+        toolCall.put("type", "function");
+        toolCall.put("function", function);
+
+        var message = new LinkedHashMap<String, Object>();
+        message.put("role", "assistant");
+        message.put("content", null);
+        message.put("tool_calls", List.of(toolCall));
+        return message;
+    }
+
+    private Map<String, Object> openAiToolResultMessage(Message.ToolResultMessage toolResultMessage) {
+        var message = new LinkedHashMap<String, Object>();
+        message.put("role", "tool");
+        message.put("tool_call_id", toolResultMessage.toolUseId());
+        message.put("content", toolResultMessage.content() == null ? "" : toolResultMessage.content());
+        return message;
+    }
+
+    private String normalizeToolArgumentsJson(String content) {
+        try {
+            return objectMapper.writeValueAsString(objectMapper.readValue(content, new TypeReference<Map<String, Object>>() {}));
+        } catch (Exception ignored) {
+            return content == null ? "{}" : content;
+        }
     }
 
     private Map<String, Object> message(String role, String text) {
@@ -618,10 +860,76 @@ public final class AgentModelClient implements ModelClient {
         return null;
     }
 
+    private String extractOpenAiText(JsonNode root) {
+        var messageNode = firstOpenAiMessage(root);
+        if (messageNode == null || !messageNode.has("content") || messageNode.path("content").isNull()) {
+            return root.toPrettyString();
+        }
+        if (messageNode.path("content").isTextual()) {
+            return messageNode.path("content").asText();
+        }
+        return messageNode.path("content").toString();
+    }
+
+    private ModelResponse.ToolRequest extractOpenAiToolRequest(JsonNode root) {
+        var messageNode = firstOpenAiMessage(root);
+        if (messageNode == null) {
+            return null;
+        }
+        var toolCalls = messageNode.path("tool_calls");
+        if (!toolCalls.isArray()) {
+            return null;
+        }
+        for (JsonNode toolCall : toolCalls) {
+            if (!"function".equals(toolCall.path("type").asText("function"))) {
+                continue;
+            }
+            var function = toolCall.path("function");
+            var toolName = function.path("name").asText(null);
+            if (toolName == null || toolName.isBlank()) {
+                continue;
+            }
+            return new ModelResponse.ToolRequest(
+                toolName,
+                parseOpenAiToolArguments(function.path("arguments").asText("")),
+                toolCall.path("id").asText(null)
+            );
+        }
+        return null;
+    }
+
+    private JsonNode firstOpenAiMessage(JsonNode root) {
+        var choices = root.path("choices");
+        if (!choices.isArray() || choices.isEmpty()) {
+            return null;
+        }
+        var messageNode = choices.get(0).path("message");
+        return messageNode.isObject() ? messageNode : null;
+    }
+
+    private Map<String, Object> parseOpenAiToolArguments(String argumentsJson) {
+        if (argumentsJson == null || argumentsJson.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(argumentsJson, new TypeReference<>() {});
+        } catch (Exception ignored) {
+            return Map.of("raw", argumentsJson);
+        }
+    }
+
     private ModelResponse.Usage extractUsage(JsonNode root) {
         var usageNode = root.path("usage");
         if (!usageNode.isObject()) {
             return new ModelResponse.Usage(0, 0);
+        }
+        if (apiType == ProviderApiType.OPENAI) {
+            return new ModelResponse.Usage(
+                usageNode.path("prompt_tokens").asLong(usageNode.path("input_tokens").asLong(0)),
+                usageNode.path("completion_tokens").asLong(usageNode.path("output_tokens").asLong(0)),
+                0,
+                0
+            );
         }
         return new ModelResponse.Usage(
             usageNode.path("input_tokens").asLong(usageNode.path("inputTokens").asLong(0)),
@@ -629,6 +937,25 @@ public final class AgentModelClient implements ModelClient {
             usageNode.path("cache_creation_input_tokens").asLong(0),
             usageNode.path("cache_read_input_tokens").asLong(0)
         );
+    }
+
+    private void applyOpenAiUsage(JsonNode usageNode, StreamingParseState state, ModelStreamEventSink streamSink) {
+        if (!usageNode.isObject()) {
+            return;
+        }
+        if (usageNode.has("prompt_tokens")) {
+            state.inputTokens = usageNode.path("prompt_tokens").asLong(0);
+            state.sawInputTokens = true;
+        }
+        if (usageNode.has("completion_tokens")) {
+            state.outputTokens = usageNode.path("completion_tokens").asLong(0);
+            state.sawOutputTokens = true;
+        }
+        streamSink.onUsage(state.inputTokens, state.outputTokens, 0, 0);
+    }
+
+    private String providerLabel() {
+        return apiType == ProviderApiType.OPENAI ? "OpenAI" : "Anthropic";
     }
 
     private String stripTrailingSlash(String value) {

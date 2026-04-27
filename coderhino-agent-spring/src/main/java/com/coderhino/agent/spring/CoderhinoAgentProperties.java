@@ -9,7 +9,7 @@ import java.util.List;
 
 @ConfigurationProperties(prefix = "coderhino.agent")
 public class CoderhinoAgentProperties {
-    private String model = "sonnet";
+    private String model = "MiniMax-M2.7";
     private Path cwd = Path.of("").toAbsolutePath().normalize();
     private PermissionMode permissionMode = PermissionMode.DEFAULT;
     private List<String> enabledTools = new ArrayList<>();
@@ -19,7 +19,7 @@ public class CoderhinoAgentProperties {
     private double maxBudgetUsd = 0.0;
     private boolean embeddedIntegrationsEnabled = false;
     private String apiKey;
-    private String apiBaseUrl = "https://api.anthropic.com";
+    private String apiBaseUrl = "https://api.minimaxi.com/anthropic";
     private ProviderApiType providerApiType = ProviderApiType.CLAUDE_CODE;
     private long contextWindow = 128000L;
     private long maxOutputTokens = 128000L;
@@ -151,10 +151,7 @@ public class CoderhinoAgentProperties {
         OPENAI;
 
         com.coderhino.query.ProviderApiType toRuntimeType() {
-            if (this == OPENAI) {
-                throw com.coderhino.query.ProviderApiType.unsupportedOpenAi();
-            }
-            return com.coderhino.query.ProviderApiType.CLAUDE_CODE;
+            return com.coderhino.query.ProviderApiType.valueOf(name());
         }
     }
 }
