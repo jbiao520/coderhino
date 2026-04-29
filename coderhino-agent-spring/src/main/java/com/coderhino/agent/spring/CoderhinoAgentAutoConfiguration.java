@@ -41,20 +41,30 @@ public class CoderhinoAgentAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ModelClient coderhinoModelClient(CoderhinoAgentProperties properties, Environment environment) {
-        var apiKey = firstNonBlank(properties.getApiKey(), environment.getProperty("ANTHROPIC_API_KEY"));
+    public ModelClient coderhinoModelClient(
+        CoderhinoAgentProperties properties,
+        Environment environment,
+        ObjectProvider<CoderhinoAgentCredentialProvider> credentialProvider
+    ) {
+        var provider = credentialProvider.getIfAvailable();
+        var apiKey = firstNonBlank(
+            provider != null ? provider.apiKey() : null,
+            properties.getApiKey(),
+            environment.getProperty("CODERHINO_AGENT_API_KEY"),
+            environment.getProperty("ANTHROPIC_API_KEY")
+        );
         if (apiKey == null) {
             throw new IllegalStateException(
-                "Model API credentials are required. Set coderhino.agent.api-key, "
-                    + "CODERHINO_AGENT_API_KEY, ANTHROPIC_API_KEY, or inject a custom ModelClient "
-                    + "for local/test behavior."
+                "Model API credentials are required. Provide a CoderhinoAgentCredentialProvider bean, set "
+                    + "coderhino.agent.api-key, CODERHINO_AGENT_API_KEY, ANTHROPIC_API_KEY, or inject a custom "
+                    + "ModelClient for local/test behavior."
             );
         }
 
         return ModelClientFactory.create(
             properties.getModel(),
             apiKey,
-            properties.getApiBaseUrl(),
+            resolveApiBaseUrl(properties),
             properties.getProviderApiType().toRuntimeType(),
             properties.getContextWindow(),
             properties.getMaxOutputTokens()
@@ -92,13 +102,19 @@ public class CoderhinoAgentAutoConfiguration {
         return builder.build();
     }
 
-    private static String firstNonBlank(String preferred, String fallback) {
-        if (preferred != null && !preferred.isBlank()) {
-            return preferred;
-        }
-        if (fallback != null && !fallback.isBlank()) {
-            return fallback;
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
         }
         return null;
+    }
+
+    private static String resolveApiBaseUrl(CoderhinoAgentProperties properties) {
+        return firstNonBlank(
+            properties.getApiBaseUrl(),
+            properties.getProviderApiType().toRuntimeType().defaultBaseUrl()
+        );
     }
 }

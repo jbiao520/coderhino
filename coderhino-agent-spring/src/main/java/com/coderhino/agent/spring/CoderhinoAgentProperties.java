@@ -19,7 +19,7 @@ public class CoderhinoAgentProperties {
     private double maxBudgetUsd = 0.0;
     private boolean embeddedIntegrationsEnabled = false;
     private String apiKey;
-    private String apiBaseUrl = "https://api.minimaxi.com/anthropic";
+    private String apiBaseUrl;
     private ProviderApiType providerApiType = ProviderApiType.CLAUDE_CODE;
     private long contextWindow = 128000L;
     private long maxOutputTokens = 128000L;
