@@ -14,8 +14,8 @@ public final class ToolingConfigurationExample {
     private ToolingConfigurationExample() {
     }
 
-    public static ToolRegistry hostOwnedToolRegistry(HostEchoTool hostEchoTool) {
-        return ToolRegistry.createEmbeddedDefault().with(hostEchoTool);
+    public static ToolRegistry hostOwnedToolRegistry(HostEchoTool hostEchoTool, OrderQueryTool orderQueryTool) {
+        return ToolRegistry.createEmbeddedDefault().with(hostEchoTool).with(orderQueryTool);
     }
 
     @Configuration(proxyBeanMethods = false)
@@ -26,8 +26,13 @@ public final class ToolingConfigurationExample {
         }
 
         @Bean
-        ToolRegistry coderhinoToolRegistry(HostEchoTool hostEchoTool) {
-            return hostOwnedToolRegistry(hostEchoTool);
+        OrderQueryTool orderQueryTool() {
+            return new OrderQueryTool();
+        }
+
+        @Bean
+        ToolRegistry coderhinoToolRegistry(HostEchoTool hostEchoTool, OrderQueryTool orderQueryTool) {
+            return hostOwnedToolRegistry(hostEchoTool, orderQueryTool);
         }
     }
 }

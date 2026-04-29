@@ -10,6 +10,7 @@ import com.coderhino.query.QueryRequest;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.state.BootstrapState;
 import com.coderhino.tools.ToolRegistry;
+import com.coderhino.tools.runtime.ToolCommandRegistry;
 import com.coderhino.types.PermissionMode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
@@ -22,6 +23,7 @@ import org.springframework.context.annotation.Primary;
 import java.lang.reflect.Field;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -160,6 +162,19 @@ class CoderhinoAgentAutoConfigurationTest {
                 assertThat(context.getStartupFailure()).isNull();
                 assertThat(context).hasSingleBean(ModelClient.class);
                 assertThat(context.getBean(ModelClient.class)).isInstanceOf(StubModelClient.class);
+            });
+    }
+
+    @Test
+    void customToolCommandRegistryIsPassedToAgent() {
+        contextRunner
+            .withUserConfiguration(CustomBeansWithToolCommandRegistry.class)
+            .run(context -> {
+                assertThat(context.getStartupFailure()).isNull();
+                assertThat(context).hasSingleBean(ToolCommandRegistry.class);
+                assertThat(context).hasSingleBean(CoderhinoAgent.class);
+                assertThat(context.getBean(CoderhinoAgent.class).config().commandRegistry())
+                    .isSameAs(context.getBean(ToolCommandRegistry.class));
             });
     }
 
@@ -368,6 +383,14 @@ class CoderhinoAgentAutoConfigurationTest {
         @Bean
         CoderhinoAgentCredentialProvider credentialProvider() {
             return () -> "provider-key";
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CustomBeansWithToolCommandRegistry extends CustomBeans {
+        @Bean
+        ToolCommandRegistry toolCommandRegistry() {
+            return name -> Optional.empty();
         }
     }
 

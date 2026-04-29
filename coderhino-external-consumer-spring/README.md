@@ -1,6 +1,6 @@
 # Coderhino External Consumer Spring Verification
 
-This module is a small verification sample for consuming `coderhino-agent-spring` from a consumer-shaped non-web Spring Boot application.
+This module is a small verification sample for consuming `coderhino-agent-spring` from a consumer-shaped Spring Boot application that now exposes a synchronous JSON chat endpoint.
 
 Use `AI_USAGE.md` for the full guide, checked-in source map, and recipe details. This README covers the quick verification split, the checked-in `application.properties` entry point, and the exact credential order for the default Spring auto-configured `ModelClient`.
 
@@ -14,7 +14,7 @@ env -u CODERHINO_AGENT_API_KEY -u ANTHROPIC_API_KEY -u OPENAI_API_KEY mvn -pl co
 
 ## Optional live manual run
 
-The runnable sample starts a non-web Spring Boot context and uses the real auto-configured `ModelClient`. Treat that path as opt-in only.
+The runnable sample starts a web-capable Spring Boot context and exposes `POST http://localhost:8080/chat`. The endpoint is synchronous JSON, stateless per request, and non-streaming. Treat that path as opt-in only.
 
 `src/main/resources/application.properties` is the primary checked-in configuration example. Keep placeholders in source control. For real deployments, prefer environment variables, a secret manager behind `CoderhinoAgentCredentialProvider`, or a custom `ModelClient`.
 
@@ -53,11 +53,48 @@ class CredentialProviderConfiguration {
 }
 ```
 
-Build from the repository root, then run from this module directory with `CODERHINO_AGENT_API_KEY` set, `coderhino.agent.api-key` configured, or a `CoderhinoAgentCredentialProvider` bean in place. The current default Spring auto-config path also accepts `ANTHROPIC_API_KEY` as a fallback. Bare `OPENAI_API_KEY` is not part of this default credential order.
+Run from the repository root with `CODERHINO_AGENT_API_KEY` set, `coderhino.agent.api-key` configured, or the sample credential provider in place. The current default Spring auto-config path also accepts `ANTHROPIC_API_KEY` as a fallback. Bare `OPENAI_API_KEY` is not part of this default credential order.
 
 ```bash
-mvn -pl coderhino-external-consumer-spring -am package
-CODERHINO_AGENT_API_KEY=your-key mvn exec:java
+mvn -pl coderhino-external-consumer-spring exec:java
+```
+
+Then call the chat sample with the exact endpoint below:
+
+```bash
+curl -s -X POST http://localhost:8080/chat -H 'Content-Type: application/json' -d '{"message":"Hello from the Spring sample"}'
+```
+
+Representative successful response:
+
+```json
+{
+  "finalText": "Hello from the Spring sample.",
+  "stopReason": "END_TURN",
+  "iterationCount": 1,
+  "success": true
+}
+```
+
+Representative invalid request response for a missing or blank `message`:
+
+```json
+{
+  "error": "invalid_request",
+  "message": "message is required"
+}
 ```
 
 This module is verification/sample code only and is not part of the first-release public runtime library set.
+
+The `/chat` route delegates to `CoderhinoAgent` through `ChatAgentRunner` and the default `CoderhinoChatAgentRunner`. That runner builds a request-owned `BootstrapState` for each call, so there is no session reuse across requests.
+
+## Chat sample wiring notes
+
+The runnable Spring sample now imports chat-specific host wiring:
+
+- `ExternalConsumerSpringApplication` imports `ChatAgentConfiguration` and `HardcodedCredentialProviderConfiguration.ProviderBeanConfiguration` for this chat sample.
+- `HardcodedCredentialProviderConfiguration` supplies `sk-coderhino-example-placeholder-not-a-real-secret` through a `CoderhinoAgentCredentialProvider`. This is sample-only and must not be treated as production credential guidance.
+- `ChatAgentConfiguration` intentionally wires the full verification surface through `ToolRegistry.createDefault()`, `CommandRegistry.createDefault(Path.of("").toAbsolutePath().normalize())`, and `commandRegistry.asToolCommandRegistry()`.
+
+Safety note: `ToolRegistry.createDefault()` exposes broad write, bash, and network-capable tools. That is useful for this verification sample, but it is not production-safe by default. The default Spring auto-config still uses embedded-safe tools unless a host app overrides that behavior.

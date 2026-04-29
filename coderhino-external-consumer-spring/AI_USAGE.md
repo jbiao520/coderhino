@@ -5,6 +5,7 @@ This file is for AI agents and host developers consuming `coderhino-agent-spring
 Use this guide when you need one of these things:
 
 - a real Spring Boot `CoderhinoAgent` bean
+- a synchronous `POST /chat` sample that wraps `CoderhinoAgent`
 - property binding for the public Spring surface
 - a credential-free local test path with a fake `ModelClient`
 - a host-owned tool, event sink, or request-specific session state
@@ -26,17 +27,17 @@ Don't use this guide as a map for internal CLI or web app code. Stay inside the 
    - Start with `src/main/java/com/coderhino/verification/examples/spring/FakeModelClientConfiguration.java`.
    - Proof tests: `src/test/java/com/coderhino/verification/examples/spring/RunApiExampleTest.java`, `ObservedCoderhinoRunTest.java`, `SessionIsolationExampleTest.java`.
 4. Need a host-owned tool without opening the full built-in tool set?
-   - Override `ToolRegistry` and add your tool to `ToolRegistry.createEmbeddedDefault()`.
-   - Start with `src/main/java/com/coderhino/verification/examples/spring/HostEchoTool.java` and `ToolingConfigurationExample.java`.
-   - Proof test: `src/test/java/com/coderhino/verification/examples/spring/ToolingConfigurationExampleTest.java`.
+    - Override `ToolRegistry` and add your tool to `ToolRegistry.createEmbeddedDefault()`.
+    - Start with `src/main/java/com/coderhino/verification/examples/spring/HostEchoTool.java` and `ToolingConfigurationExample.java`.
+    - Proof test: `src/test/java/com/coderhino/verification/examples/spring/ToolingConfigurationExampleTest.java`.
 5. Need callback observation for text, usage, or errors?
-   - Provide a `QueryEventSink` bean or a request-level sink.
-   - Start with `src/main/java/com/coderhino/verification/examples/spring/ObservedCoderhinoRun.java`.
-   - Proof test: `src/test/java/com/coderhino/verification/examples/spring/ObservedCoderhinoRunTest.java`.
+    - Provide a `QueryEventSink` bean or a request-level sink.
+    - Start with `src/main/java/com/coderhino/verification/examples/spring/ObservedCoderhinoRun.java`.
+    - Proof test: `src/test/java/com/coderhino/verification/examples/spring/ObservedCoderhinoRunTest.java`.
 6. Need one run to keep its own session state?
-   - Pass a request-owned `BootstrapState`.
-   - Start with `src/main/java/com/coderhino/verification/examples/spring/SessionIsolationExample.java`.
-   - Proof test: `src/test/java/com/coderhino/verification/examples/spring/SessionIsolationExampleTest.java`.
+     - Pass a request-owned `BootstrapState`.
+     - Start with `src/main/java/com/coderhino/verification/examples/spring/SessionIsolationExample.java`.
+     - Proof test: `src/test/java/com/coderhino/verification/examples/spring/SessionIsolationExampleTest.java`.
 7. Need a real provider call?
    - Treat it as opt-in only.
    - Start with `src/main/java/com/coderhino/verification/examples/spring/LiveProviderRunner.java`.
@@ -53,6 +54,7 @@ Don't use this guide as a map for internal CLI or web app code. Stay inside the 
 | Host-provided `ServiceRegistry` bean | Yes | Extension point when embedded-safe defaults are not enough. |
 | Host-provided `PermissionChecker` bean | Yes | Supported auto-config override point. |
 | Host-provided `QueryEventSink` bean | Yes | Applies to the configured agent for normal runs. |
+| Host-provided `ToolCommandRegistry` bean | Yes | Passed into the auto-configured `CoderhinoAgent`; required for model-visible prompt commands through `SkillTool`. |
 | Request-level `QueryEventSink` in `AgentRequest` | Yes | Overrides the configured sink for a single run. |
 | Request-level `BootstrapState` in `AgentRequest` | Yes | Use for session isolation or per-run state ownership. |
 | `enabled-tools` empty list | Yes | Safe default. Gives `read_file`, `glob`, `grep`. |
@@ -61,6 +63,59 @@ Don't use this guide as a map for internal CLI or web app code. Stay inside the 
 | `coderhino-backend`, `coderhino-web`, frontend, CLI internals | No | Out of scope for this Spring consumer guide. |
 | Generated outputs or build artifacts | No | Never cite them. Use checked-in source paths only. |
 | Assuming live providers are part of default tests | No | Default verification is local and fake. Live usage is separate opt-in behavior. |
+
+## Chat sample, run path, and safety semantics
+
+The runnable sample in this module is web-capable now. `ExternalConsumerSpringApplication` imports `ChatAgentConfiguration` and `HardcodedCredentialProviderConfiguration.ProviderBeanConfiguration`, so starting the app gives you a synchronous JSON `POST http://localhost:8080/chat` endpoint.
+
+Run it from the repository root:
+
+```bash
+mvn -pl coderhino-external-consumer-spring exec:java
+```
+
+Call it with the exact sample request:
+
+```bash
+curl -s -X POST http://localhost:8080/chat -H 'Content-Type: application/json' -d '{"message":"Hello from the Spring sample"}'
+```
+
+Request JSON:
+
+```json
+{
+  "message": "Hello from the Spring sample"
+}
+```
+
+Representative success response JSON:
+
+```json
+{
+  "finalText": "Hello from the Spring sample.",
+  "stopReason": "END_TURN",
+  "iterationCount": 1,
+  "success": true
+}
+```
+
+Representative invalid request response JSON:
+
+```json
+{
+  "error": "invalid_request",
+  "message": "message is required"
+}
+```
+
+Behavior notes:
+
+- `/chat` is synchronous JSON, stateless per request, and non-streaming.
+- `ChatController` delegates to `ChatAgentRunner`, and the default implementation is `CoderhinoChatAgentRunner`.
+- `CoderhinoChatAgentRunner` calls `CoderhinoAgent` with a request-owned `BootstrapState`, so each request gets fresh state instead of reusing a shared conversation session.
+- This sample imports `HardcodedCredentialProviderConfiguration`, which returns the placeholder key from `HardcodedCredentialProviderConfiguration.ProviderBeanConfiguration`. That setup is sample-only and must not be treated as production credential guidance.
+- `ChatAgentConfiguration` intentionally wires `ToolRegistry.createDefault()`, `CommandRegistry.createDefault(Path.of("").toAbsolutePath().normalize())`, and `commandRegistry.asToolCommandRegistry()` so the sample can exercise the full verification surface.
+- `ToolRegistry.createDefault()` exposes broad write, bash, and network-capable tools. That is not production-safe by default. This warning applies to this sample override, not to the default Spring auto-config path.
 
 ## Safe defaults you get if you do nothing extra
 
@@ -127,19 +182,30 @@ Keep real credentials out of source-controlled files. For production, prefer `CO
 - Proving test: `coderhino-external-consumer-spring/src/test/java/com/coderhino/verification/examples/spring/ToolingConfigurationExampleTest.java`
 - Use this when: you need to keep the safe embedded tools and add a host-owned tool.
 
-### 5. Event sink observation
+### 5. Chat sample credential provider and full-registry wiring
+
+- Credential provider: `coderhino-external-consumer-spring/src/main/java/com/coderhino/verification/examples/spring/HardcodedCredentialProviderConfiguration.java`
+  - `HardcodedCredentialProviderConfiguration.ProviderBeanConfiguration` is imported by the runnable chat sample. It is sample-only, returns a placeholder key, and should not be copied as production credential guidance.
+- Chat wiring source: `coderhino-external-consumer-spring/src/main/java/com/coderhino/verification/spring/chat/ChatAgentConfiguration.java`
+- Runnable app import site: `coderhino-external-consumer-spring/src/main/java/com/coderhino/verification/spring/ExternalConsumerSpringApplication.java`
+- Proving tests:
+  - `coderhino-external-consumer-spring/src/test/java/com/coderhino/verification/spring/chat/ChatAgentWiringTest.java`
+  - `coderhino-external-consumer-spring/src/test/java/com/coderhino/verification/spring/chat/ChatControllerTest.java`
+- Use this when: you need the runnable `/chat` sample to expose the full verification surface while keeping placeholder credential guidance explicit.
+
+### 6. Event sink observation
 
 - Recipe class: `coderhino-external-consumer-spring/src/main/java/com/coderhino/verification/examples/spring/ObservedCoderhinoRun.java`
 - Proving test: `coderhino-external-consumer-spring/src/test/java/com/coderhino/verification/examples/spring/ObservedCoderhinoRunTest.java`
 - Use this when: you need callback capture for success, usage, text chunks, or error-only completion behavior.
 
-### 6. Request-level session isolation
+### 7. Request-level session isolation
 
 - Recipe class: `coderhino-external-consumer-spring/src/main/java/com/coderhino/verification/examples/spring/SessionIsolationExample.java`
 - Proving test: `coderhino-external-consumer-spring/src/test/java/com/coderhino/verification/examples/spring/SessionIsolationExampleTest.java`
 - Use this when: each run needs its own `BootstrapState` without mutating the agent's managed default state.
 
-### 7. Live provider opt-in gate
+### 8. Live provider opt-in gate
 
 - Recipe class: `coderhino-external-consumer-spring/src/main/java/com/coderhino/verification/examples/spring/LiveProviderRunner.java`
 - Proving test: `coderhino-external-consumer-spring/src/test/java/com/coderhino/verification/examples/spring/LiveProviderRunnerTest.java`
@@ -180,6 +246,7 @@ These are the auto-config override points in `CoderhinoAgentAutoConfiguration`.
 
 - `ModelClient`
 - `ToolRegistry`
+- `ToolCommandRegistry`
 - `ServiceRegistry`
 - `PermissionChecker`
 - `QueryEventSink`
@@ -393,7 +460,7 @@ Do not treat that command as baseline verification. It is credential-gated and o
 
 ## Notes that matter for AI agents
 
-- `ExternalConsumerSpringApplication` contains a `startupProbe(...)` bean that calls `agent.run(...)`. If you boot a real app context with the default `ModelClient`, you are on the real provider path unless you injected a fake client first.
+- `ExternalConsumerSpringApplication` contains a `startupProbe(...)` bean that only logs readiness plus `agent.config().modelClient().getClass().getSimpleName()` and does not call `agent.run(...)` at boot. Real provider traffic happens only when `/chat` or another explicit agent-run path invokes the agent while a real default `ModelClient` is configured.
 - `AgentRequest.visibleInput` is host-facing and persisted in state. Raw `input` is what the model sees.
 - Request-level `QueryEventSink` and `BootstrapState` override the configured defaults for one run.
 - `embeddedIntegrationsEnabled` exists for binding and documentation truth, but it is not currently consumed by the Spring auto-config.

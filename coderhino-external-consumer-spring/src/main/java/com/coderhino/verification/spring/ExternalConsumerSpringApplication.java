@@ -1,31 +1,35 @@
 package com.coderhino.verification.spring;
 
 import com.coderhino.agent.CoderhinoAgent;
+import com.coderhino.verification.examples.spring.HardcodedCredentialProviderConfiguration;
+import com.coderhino.verification.spring.chat.ChatAgentConfiguration;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 
 @SpringBootApplication(proxyBeanMethods = false)
+@Import({
+    ChatAgentConfiguration.class,
+    HardcodedCredentialProviderConfiguration.ProviderBeanConfiguration.class
+})
 public final class ExternalConsumerSpringApplication {
 
     private ExternalConsumerSpringApplication() {
     }
 
     public static void main(String[] args) {
-        new SpringApplicationBuilder(ExternalConsumerSpringApplication.class)
-            .web(WebApplicationType.NONE)
-            .run(args);
+        SpringApplication.run(ExternalConsumerSpringApplication.class, args);
     }
 
     @Bean
     ApplicationRunner startupProbe(CoderhinoAgent agent) {
-        CoderhinoAgent.AgentResult agentResult = agent.run("explain the current repo");
-        System.out.println(agentResult.finalText());
-        return args -> System.out.println(
-            "CoderhinoAgent ready via coderhino-agent-spring using "
-                + agent.config().modelClient().getClass().getSimpleName()
-        );
+        return args -> {
+            System.out.println(
+                "CoderhinoAgent ready via coderhino-agent-spring using "
+                    + agent.config().modelClient().getClass().getSimpleName()
+            );
+        };
     }
 }

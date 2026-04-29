@@ -55,21 +55,27 @@ class ToolingConfigurationExampleTest {
             .run(context -> {
                 assertThat(context).hasSingleBean(ToolRegistry.class);
                 assertThat(context).hasSingleBean(HostEchoTool.class);
+                assertThat(context).hasSingleBean(OrderQueryTool.class);
 
                 var registry = context.getBean(ToolRegistry.class);
                 var toolNames = toolNames(registry);
                 assertThat(toolNames)
-                    .containsExactly("read_file", "glob", "grep", HostEchoTool.TOOL_NAME);
+                    .containsExactly("read_file", "glob", "grep", HostEchoTool.TOOL_NAME, OrderQueryTool.TOOL_NAME);
 
                 var hostEchoTool = context.getBean(HostEchoTool.class);
                 assertThat(registry.find(HostEchoTool.TOOL_NAME)).containsSame(hostEchoTool);
                 assertThat(hostEchoTool.execute(new HostEchoTool.Input("hello from host"), toolContext()))
                     .isEqualTo("host:hello from host");
 
+                var orderQueryTool = context.getBean(OrderQueryTool.class);
+                assertThat(registry.find(OrderQueryTool.TOOL_NAME)).containsSame(orderQueryTool);
+                assertThat(orderQueryTool.execute(new OrderQueryTool.Input(" order-123 "), toolContext()).orderId())
+                    .isEqualTo("order-123");
+
                 var agent = context.getBean(CoderhinoAgent.class);
                 assertThat(agent.config().toolRegistry()).isSameAs(registry);
                 assertThat(toolNames(agent.config().toolRegistry()))
-                    .containsExactly("read_file", "glob", "grep", HostEchoTool.TOOL_NAME);
+                    .containsExactly("read_file", "glob", "grep", HostEchoTool.TOOL_NAME, OrderQueryTool.TOOL_NAME);
             });
     }
 
@@ -90,6 +96,33 @@ class ToolingConfigurationExampleTest {
         var allowed = tool.validate(new HostEchoTool.Input("echo me"), toolContext());
         assertThat(allowed.allowed()).isTrue();
         assertThat(tool.execute(new HostEchoTool.Input(" echo me "), toolContext())).isEqualTo("host:echo me");
+    }
+
+    @Test
+    void orderQueryToolIsReadOnlyAndReturnsMockOrder() throws Exception {
+        var tool = new OrderQueryTool();
+
+        assertThat(tool.name()).isEqualTo(OrderQueryTool.TOOL_NAME);
+        assertThat(tool.isReadOnly()).isTrue();
+        assertThat(tool.inputSchema().type()).isEqualTo("object");
+        assertThat(tool.inputSchema().properties())
+            .containsExactly(Map.entry("orderId", Map.of("type", "string")));
+
+        var denied = tool.validate(new OrderQueryTool.Input("   "), toolContext());
+        assertThat(denied).isInstanceOf(PermissionResult.Deny.class);
+        assertThat(((PermissionResult.Deny) denied).reason()).isEqualTo("orderId must not be blank.");
+
+        var allowed = tool.validate(new OrderQueryTool.Input("order-123"), toolContext());
+        assertThat(allowed.allowed()).isTrue();
+
+        var output = tool.execute(new OrderQueryTool.Input(" order-123 "), toolContext());
+        assertThat(output.orderId()).isEqualTo("order-123");
+        assertThat(output.status()).isEqualTo("MOCK_CONFIRMED");
+        assertThat(output.customerName()).isEqualTo("Ada Lovelace");
+        assertThat(output.currency()).isEqualTo("USD");
+        assertThat(output.total()).isEqualTo("129.99");
+        assertThat(output.lineItems())
+            .containsExactly(new OrderQueryTool.LineItem("SKU-COFFEE-001", "Coderhino Coffee Beans", 1));
     }
 
     private static List<String> toolNames(ToolRegistry registry) {

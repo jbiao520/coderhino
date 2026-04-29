@@ -7,6 +7,7 @@ import com.coderhino.query.ModelClientFactory;
 import com.coderhino.query.QueryEventSink;
 import com.coderhino.services.ServiceRegistry;
 import com.coderhino.tools.ToolRegistry;
+import com.coderhino.tools.runtime.ToolCommandRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -79,7 +80,8 @@ public class CoderhinoAgentAutoConfiguration {
         ToolRegistry toolRegistry,
         ServiceRegistry serviceRegistry,
         PermissionChecker permissionChecker,
-        ObjectProvider<QueryEventSink> eventSink
+        ObjectProvider<QueryEventSink> eventSink,
+        ObjectProvider<ToolCommandRegistry> commandRegistry
     ) {
         var builder = CoderhinoAgent.builder()
             .model(properties.getModel())
@@ -98,6 +100,10 @@ public class CoderhinoAgentAutoConfiguration {
         var sink = eventSink.getIfAvailable();
         if (sink != null) {
             builder.eventSink(sink);
+        }
+        var registry = commandRegistry.getIfAvailable();
+        if (registry != null) {
+            builder.commandRegistry(registry);
         }
         return builder.build();
     }
