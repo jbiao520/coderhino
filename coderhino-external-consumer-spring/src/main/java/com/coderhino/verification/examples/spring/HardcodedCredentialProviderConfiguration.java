@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 public final class HardcodedCredentialProviderConfiguration {
-    public static final String EXAMPLE_API_KEY = "sk-cp-yq8X_PfQ0uT7YWJhA_dtN5uYycc83mq1UT0iuDfzwomTdJ1LhU2qcqU3SqsZeN7_7oqdUOVawJuXbfD-akkuwZz6R217eJmrhZ9GtBt-k27oys6zcY7tVNo";
+    public static final String EXAMPLE_API_KEY = "sk-omTdJ1LhU2qcqU3SqsZeN7_7oqdUOVawJuXbfD-akkuwZz6R217eJmrhZ9GtBt-k27oys6zcY7tVNo";
 
     private HardcodedCredentialProviderConfiguration() {
     }
