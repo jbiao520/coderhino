@@ -8,11 +8,15 @@ import com.coderhino.types.PermissionResult;
 import com.coderhino.types.ToolInputSchema;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public final class BashTool implements ToolDefinition<BashTool.Input, BashTool.Output> {
@@ -67,35 +71,75 @@ public final class BashTool implements ToolDefinition<BashTool.Input, BashTool.O
             .directory(cwd.toFile())
             .start();
 
-        var finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            return new Output(-1, "", "Command timed out after %d seconds".formatted(timeout.toSeconds()));
-        }
+        var executor = Executors.newFixedThreadPool(2);
+        Future<String> stdoutFuture = executor.submit(() -> readWithLimit(process.getInputStream(), MAX_OUTPUT_SIZE));
+        Future<String> stderrFuture = executor.submit(() -> readWithLimit(process.getErrorStream(), MAX_OUTPUT_SIZE));
+        try {
+            var finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                process.waitFor(5, TimeUnit.SECONDS);
+                var stdout = readFuture(stdoutFuture);
+                var stderr = appendLine(readFuture(stderrFuture), "Command timed out after %d seconds".formatted(timeout.toSeconds()));
+                return new Output(-1, stdout, stderr);
+            }
 
-        try (var stdoutReader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
-             var stderrReader = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
-            var stdout = readWithLimit(stdoutReader, MAX_OUTPUT_SIZE);
-            var stderr = readWithLimit(stderrReader, MAX_OUTPUT_SIZE);
+            var stdout = readFuture(stdoutFuture);
+            var stderr = readFuture(stderrFuture);
             return new Output(process.exitValue(), stdout, stderr);
+        } finally {
+            executor.shutdownNow();
         }
     }
 
-    private String readWithLimit(BufferedReader reader, int maxSize) throws Exception {
+    private String readWithLimit(InputStream inputStream, int maxSize) throws Exception {
         var sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
+        var truncated = false;
+        try (var reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (sb.length() < maxSize) {
+                    if (sb.length() > 0) {
+                        sb.append(System.lineSeparator());
+                    }
+                    var remaining = maxSize - sb.length();
+                    if (line.length() > remaining) {
+                        sb.append(line, 0, remaining);
+                        truncated = true;
+                    } else {
+                        sb.append(line);
+                    }
+                } else {
+                    truncated = true;
+                }
+            }
+        }
+        if (truncated) {
             if (sb.length() > 0) {
                 sb.append(System.lineSeparator());
             }
-            if (sb.length() + line.length() > maxSize) {
-                sb.append(line, 0, maxSize - sb.length());
-                sb.append(System.lineSeparator()).append("... [truncated]");
-                break;
-            }
-            sb.append(line);
+            sb.append("... [truncated]");
         }
         return sb.toString();
+    }
+
+    private String readFuture(Future<String> future) throws Exception {
+        try {
+            return future.get();
+        } catch (ExecutionException e) {
+            var cause = e.getCause();
+            if (cause instanceof Exception exception) {
+                throw exception;
+            }
+            throw e;
+        }
+    }
+
+    private String appendLine(String existing, String line) {
+        if (existing == null || existing.isEmpty()) {
+            return line;
+        }
+        return existing + System.lineSeparator() + line;
     }
 
     public record Input(String command, Integer timeoutSeconds) {
