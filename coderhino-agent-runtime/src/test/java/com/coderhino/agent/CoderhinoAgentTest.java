@@ -19,6 +19,7 @@ import com.coderhino.types.ToolInputSchema;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -252,6 +253,43 @@ class CoderhinoAgentTest {
 
         assertTrue(sink.lastToolResult.contains("Invalid input for tool host_echo"));
         assertTrue(sink.lastToolResult.contains("arguments did not match expected input structure"));
+    }
+
+    @Test
+    void apiKeyCanPointToFile() throws Exception {
+        Path apiKeyFile = Files.createTempFile("coderhino-api-key", ".txt");
+        Files.writeString(apiKeyFile, " file-backed-key \n");
+
+        var agent = CoderhinoAgent.builder()
+            .apiKey(apiKeyFile.toString())
+            .build();
+
+        assertEquals("file-backed-key", extractApiKey(agent));
+    }
+
+    @Test
+    void apiKeyFileCanUseHomeDirectoryShortcut() throws Exception {
+        String originalUserHome = System.getProperty("user.home");
+        Path home = Files.createTempDirectory("coderhino-home");
+        Files.writeString(home.resolve(".token.txt"), " home-file-backed-key \n");
+
+        try {
+            System.setProperty("user.home", home.toString());
+            var agent = CoderhinoAgent.builder()
+                .apiKey("~/.token.txt")
+                .build();
+
+            assertEquals("home-file-backed-key", extractApiKey(agent));
+        } finally {
+            System.setProperty("user.home", originalUserHome);
+        }
+    }
+
+    private static String extractApiKey(CoderhinoAgent agent) throws Exception {
+        Object modelClient = agent.config().modelClient();
+        var apiKeyField = modelClient.getClass().getDeclaredField("apiKey");
+        apiKeyField.setAccessible(true);
+        return (String) apiKeyField.get(modelClient);
     }
 
     private static final class CapturingModelClient implements ModelClient {

@@ -298,7 +298,7 @@ public final class CoderhinoAgent {
             var resolvedToolRegistry = toolRegistry == null ? confinedEmbeddedToolRegistry(cwd) : toolRegistry;
             resolvedToolRegistry = resolvedToolRegistry.withAll(customTools);
             var resolvedModelClient = modelClient == null
-                ? ModelClientFactory.create(model, apiKey, apiBaseUrl, providerApiType, contextWindow, maxOutputTokens)
+                ? ModelClientFactory.create(model, resolveApiKeyValue(apiKey), apiBaseUrl, providerApiType, contextWindow, maxOutputTokens)
                 : modelClient;
             var config = new AgentConfig(
                 resolvedModelClient,
@@ -317,6 +317,33 @@ public final class CoderhinoAgent {
                 commandRegistry
             );
             return new CoderhinoAgent(config);
+        }
+
+        private static String resolveApiKeyValue(String value) {
+            if (value == null || value.isBlank()) {
+                return value;
+            }
+
+            Path candidatePath = expandHomeDirectory(value.trim());
+            if (!Files.isRegularFile(candidatePath)) {
+                return value;
+            }
+
+            try {
+                return Files.readString(candidatePath).trim();
+            } catch (IOException exception) {
+                throw new IllegalStateException("Failed to read Model API credentials from file: " + candidatePath, exception);
+            }
+        }
+
+        private static Path expandHomeDirectory(String value) {
+            if (value.equals("~")) {
+                return Path.of(System.getProperty("user.home"));
+            }
+            if (value.startsWith("~/")) {
+                return Path.of(System.getProperty("user.home"), value.substring(2));
+            }
+            return Path.of(value);
         }
     }
 
