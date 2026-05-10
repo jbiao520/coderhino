@@ -399,6 +399,11 @@ public final class AgentModelClient implements ModelClient {
                     }
                 }
             }
+            case "signature_delta" -> {
+                if (delta.has("signature")) {
+                    state.thinkingSignature.append(delta.path("signature").asText(""));
+                }
+            }
             default -> {
                 appendTextDelta(delta, state, streamSink);
                 appendToolInputDelta(delta, state, streamSink);
@@ -453,7 +458,7 @@ public final class AgentModelClient implements ModelClient {
         var usage = new ModelResponse.Usage(state.inputTokens, state.outputTokens, state.cacheCreationTokens, state.cacheReadTokens);
         if (state.toolName != null && !state.toolName.isBlank()) {
             state.toolArguments = materializeFinalToolArguments(state);
-            return new ModelResponse.ToolRequest(state.toolName, state.toolArguments, state.toolUseId, usage, state.thinking.toString());
+            return new ModelResponse.ToolRequest(state.toolName, state.toolArguments, state.toolUseId, usage, state.thinking.toString(), state.thinkingSignature.toString());
         }
         return new ModelResponse.AssistantReply(state.text.toString(), usage);
     }
@@ -476,6 +481,7 @@ public final class AgentModelClient implements ModelClient {
     private static final class StreamingParseState {
         private final StringBuilder text = new StringBuilder();
         private final StringBuilder thinking = new StringBuilder();
+        private final StringBuilder thinkingSignature = new StringBuilder();
         private final StringBuilder toolInputJson = new StringBuilder();
         private String toolName;
         private String toolUseId;
@@ -802,10 +808,12 @@ public final class AgentModelClient implements ModelClient {
 
     private Map<String, Object> assistantToolUseMessage(Message.AssistantToolUseMessage toolUseMessage) {
         var content = new ArrayList<Object>();
-        if (toolUseMessage.thinking() != null && !toolUseMessage.thinking().isBlank()) {
+        if (toolUseMessage.thinking() != null && !toolUseMessage.thinking().isBlank()
+            && toolUseMessage.thinkingSignature() != null && !toolUseMessage.thinkingSignature().isBlank()) {
             var thinkingBlock = new LinkedHashMap<String, Object>();
             thinkingBlock.put("type", "thinking");
             thinkingBlock.put("thinking", toolUseMessage.thinking());
+            thinkingBlock.put("signature", toolUseMessage.thinkingSignature());
             content.add(thinkingBlock);
         }
 
@@ -853,10 +861,12 @@ public final class AgentModelClient implements ModelClient {
         }
 
         var thinking = new StringBuilder();
+        String thinkingSignature = null;
         for (JsonNode item : content) {
             var type = item.path("type").asText();
             if ("thinking".equals(type) && item.has("thinking")) {
                 thinking.append(item.path("thinking").asText());
+                thinkingSignature = item.path("signature").asText(null);
                 continue;
             }
             if (!"tool_use".equals(type)) {
@@ -874,7 +884,7 @@ public final class AgentModelClient implements ModelClient {
             if (inputNode.isObject()) {
                 arguments = objectMapper.convertValue(inputNode, new TypeReference<>() {});
             }
-            return new ModelResponse.ToolRequest(toolName, arguments, toolUseId, usage, thinking.toString());
+            return new ModelResponse.ToolRequest(toolName, arguments, toolUseId, usage, thinking.toString(), thinkingSignature);
         }
 
         return null;
