@@ -278,6 +278,7 @@ public final class AgentModelClient implements ModelClient {
             case OPENAI -> requestBuilder.header("Authorization", "Bearer " + apiKey);
             case CLAUDE_CODE -> requestBuilder
                 .header("x-api-key", apiKey)
+                .header("Authorization","Bearer " +  apiKey)
                 .header("anthropic-version", "2023-06-01");
         }
     }
