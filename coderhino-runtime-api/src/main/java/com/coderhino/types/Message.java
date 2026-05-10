@@ -31,9 +31,13 @@ public sealed interface Message permits Message.UserMessage, Message.AssistantMe
     record AssistantMessage(String content) implements Message {
     }
 
-    record AssistantToolUseMessage(String content, String toolName, String toolUseId, String assistantMessageId) implements Message {
+    record AssistantToolUseMessage(String content, String toolName, String toolUseId, String assistantMessageId, String thinking) implements Message {
+        public AssistantToolUseMessage(String content, String toolName, String toolUseId, String assistantMessageId) {
+            this(content, toolName, toolUseId, assistantMessageId, null);
+        }
+
         public AssistantToolUseMessage(String content, String toolName, String toolUseId) {
-            this(content, toolName, toolUseId, null);
+            this(content, toolName, toolUseId, null, null);
         }
     }
 

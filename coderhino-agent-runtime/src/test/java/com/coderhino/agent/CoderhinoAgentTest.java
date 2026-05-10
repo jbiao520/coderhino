@@ -182,6 +182,32 @@ class CoderhinoAgentTest {
     }
 
     @Test
+    void embeddedGrepAcceptsPublishedSnakeCaseArguments() throws Exception {
+        var workspace = Files.createTempDirectory("coderhino-workspace");
+        Files.writeString(workspace.resolve("secrets.txt"), "sk-ant-test-token");
+        var modelClient = new SequentialToolModelClient(List.of(
+            new ModelResponse.ToolRequest("grep", Map.of(
+                "pattern", "sk-ant",
+                "path", "secrets.txt",
+                "output_mode", "content",
+                "head_limit", 10,
+                "case_insensitive", true
+            ), "tool-1")
+        ));
+        var sink = new CapturingQueryEventSink();
+        var agent = CoderhinoAgent.builder()
+            .modelClient(modelClient)
+            .cwd(workspace)
+            .eventSink(sink)
+            .build();
+
+        agent.run("find token");
+
+        assertTrue(sink.lastToolResult.contains("sk-ant-test-token"));
+        assertFalse(sink.lastToolResult.contains("Invalid input for tool grep"));
+    }
+
+    @Test
     void explicitHostRegistryIsNotWorkspaceConfined() throws Exception {
         var workspace = Files.createTempDirectory("coderhino-workspace");
         var outside = Files.createTempFile("coderhino-outside", ".txt");

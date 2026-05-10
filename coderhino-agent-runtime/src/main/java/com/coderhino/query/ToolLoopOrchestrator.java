@@ -219,7 +219,8 @@ final class ToolLoopOrchestrator {
                     argumentsJson,
                     toolRequest.toolName(),
                     toolRequest.toolUseId(),
-                    assistantMessageId
+                    assistantMessageId,
+                    toolRequest.thinking()
                 );
                 history.add(assistantToolUseMessage);
                 currentRequest = withMessages(currentRequest, history);

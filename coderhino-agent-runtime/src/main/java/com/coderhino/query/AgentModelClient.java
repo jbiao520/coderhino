@@ -285,9 +285,11 @@ public final class AgentModelClient implements ModelClient {
     ModelResponse parseResponseBody(String body) throws Exception {
         var root = objectMapper.readTree(body);
         var usage = extractUsage(root);
-        var toolRequest = apiType == ProviderApiType.OPENAI ? extractOpenAiToolRequest(root) : extractToolRequest(root);
+        var toolRequest = apiType == ProviderApiType.OPENAI ? extractOpenAiToolRequest(root) : extractToolRequest(root, usage);
         if (toolRequest != null) {
-            return new ModelResponse.ToolRequest(toolRequest.toolName(), toolRequest.arguments(), toolRequest.toolUseId(), usage);
+            return apiType == ProviderApiType.OPENAI
+                ? new ModelResponse.ToolRequest(toolRequest.toolName(), toolRequest.arguments(), toolRequest.toolUseId(), usage)
+                : toolRequest;
         }
         return new ModelResponse.AssistantReply(apiType == ProviderApiType.OPENAI ? extractOpenAiText(root) : extractText(root), usage);
     }
@@ -391,6 +393,7 @@ public final class AgentModelClient implements ModelClient {
                 if (delta.has("thinking")) {
                     var thinking = delta.path("thinking").asText();
                     if (!thinking.isEmpty()) {
+                        state.thinking.append(thinking);
                         streamSink.onThinkingDelta(thinking);
                     }
                 }
@@ -449,7 +452,7 @@ public final class AgentModelClient implements ModelClient {
         var usage = new ModelResponse.Usage(state.inputTokens, state.outputTokens, state.cacheCreationTokens, state.cacheReadTokens);
         if (state.toolName != null && !state.toolName.isBlank()) {
             state.toolArguments = materializeFinalToolArguments(state);
-            return new ModelResponse.ToolRequest(state.toolName, state.toolArguments, state.toolUseId, usage);
+            return new ModelResponse.ToolRequest(state.toolName, state.toolArguments, state.toolUseId, usage, state.thinking.toString());
         }
         return new ModelResponse.AssistantReply(state.text.toString(), usage);
     }
@@ -471,6 +474,7 @@ public final class AgentModelClient implements ModelClient {
 
     private static final class StreamingParseState {
         private final StringBuilder text = new StringBuilder();
+        private final StringBuilder thinking = new StringBuilder();
         private final StringBuilder toolInputJson = new StringBuilder();
         private String toolName;
         private String toolUseId;
@@ -796,6 +800,14 @@ public final class AgentModelClient implements ModelClient {
     }
 
     private Map<String, Object> assistantToolUseMessage(Message.AssistantToolUseMessage toolUseMessage) {
+        var content = new ArrayList<Object>();
+        if (toolUseMessage.thinking() != null && !toolUseMessage.thinking().isBlank()) {
+            var thinkingBlock = new LinkedHashMap<String, Object>();
+            thinkingBlock.put("type", "thinking");
+            thinkingBlock.put("thinking", toolUseMessage.thinking());
+            content.add(thinkingBlock);
+        }
+
         var block = new LinkedHashMap<String, Object>();
         block.put("type", "tool_use");
         if (toolUseMessage.toolUseId() != null && !toolUseMessage.toolUseId().isBlank()) {
@@ -803,9 +815,10 @@ public final class AgentModelClient implements ModelClient {
         }
         block.put("name", toolUseMessage.toolName());
         block.put("input", parseAssistantToolUseInput(toolUseMessage.content()));
+        content.add(block);
         return Map.of(
             "role", "assistant",
-            "content", List.of(block)
+            "content", content
         );
     }
 
@@ -832,14 +845,20 @@ public final class AgentModelClient implements ModelClient {
         return fragments.isEmpty() ? root.toPrettyString() : String.join(System.lineSeparator(), fragments);
     }
 
-    private ModelResponse.ToolRequest extractToolRequest(JsonNode root) {
+    private ModelResponse.ToolRequest extractToolRequest(JsonNode root, ModelResponse.Usage usage) {
         var content = root.path("content");
         if (!content.isArray()) {
             return null;
         }
 
+        var thinking = new StringBuilder();
         for (JsonNode item : content) {
-            if (!"tool_use".equals(item.path("type").asText())) {
+            var type = item.path("type").asText();
+            if ("thinking".equals(type) && item.has("thinking")) {
+                thinking.append(item.path("thinking").asText());
+                continue;
+            }
+            if (!"tool_use".equals(type)) {
                 continue;
             }
 
@@ -854,7 +873,7 @@ public final class AgentModelClient implements ModelClient {
             if (inputNode.isObject()) {
                 arguments = objectMapper.convertValue(inputNode, new TypeReference<>() {});
             }
-            return new ModelResponse.ToolRequest(toolName, arguments, toolUseId);
+            return new ModelResponse.ToolRequest(toolName, arguments, toolUseId, usage, thinking.toString());
         }
 
         return null;

@@ -19,13 +19,17 @@ public sealed interface ModelResponse permits ModelResponse.AssistantReply, Mode
         }
     }
 
-    record ToolRequest(String toolName, Map<String, Object> arguments, String toolUseId, Usage usage) implements ModelResponse {
+    record ToolRequest(String toolName, Map<String, Object> arguments, String toolUseId, Usage usage, String thinking) implements ModelResponse {
+        public ToolRequest(String toolName, Map<String, Object> arguments, String toolUseId, Usage usage) {
+            this(toolName, arguments, toolUseId, usage, null);
+        }
+
         public ToolRequest(String toolName, Map<String, Object> arguments, String toolUseId) {
-            this(toolName, arguments, toolUseId, new Usage(0, 0));
+            this(toolName, arguments, toolUseId, new Usage(0, 0), null);
         }
 
         public ToolRequest(String toolName, Map<String, Object> arguments) {
-            this(toolName, arguments, null, new Usage(0, 0));
+            this(toolName, arguments, null, new Usage(0, 0), null);
         }
     }
 
