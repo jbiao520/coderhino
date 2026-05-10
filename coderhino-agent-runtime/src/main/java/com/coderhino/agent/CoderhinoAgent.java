@@ -465,7 +465,7 @@ public final class CoderhinoAgent {
         @Override public boolean isReadOnly() { return true; }
         @Override public ToolInputSchema inputSchema() {
             return ToolInputSchema.object(Map.of(
-                "pattern", Map.of("type", "string"), "basePath", Map.of("type", "string"), "glob", Map.of("type", "string"),
+                "pattern", Map.of("type", "string"), "basePath", Map.of("type", "string"), "path", Map.of("type", "string"), "glob", Map.of("type", "string"),
                 "output_mode", Map.of("type", "string"), "context", Map.of("type", "integer"), "head_limit", Map.of("type", "integer"),
                 "case_insensitive", Map.of("type", "boolean")
             ));
@@ -474,11 +474,13 @@ public final class CoderhinoAgent {
             if (input.pattern() == null || input.pattern().isBlank()) return PermissionResult.deny("Pattern must not be blank.");
             try { Pattern.compile(input.pattern(), Boolean.TRUE.equals(input.caseInsensitive()) ? Pattern.CASE_INSENSITIVE : 0); }
             catch (PatternSyntaxException e) { return PermissionResult.deny("Invalid regex pattern: " + e.getMessage()); }
-            if (input.basePath() != null && !input.basePath().isBlank()) confinedPath(workspace, input.basePath());
+            var rawBasePath = input.rawBasePath();
+            if (rawBasePath != null && !rawBasePath.isBlank()) confinedPath(workspace, rawBasePath);
             return PermissionResult.allow();
         }
         @Override public Output execute(Input input, ToolContext context) throws Exception {
-            var basePath = input.basePath() == null || input.basePath().isBlank() ? workspace : confinedPath(workspace, input.basePath());
+            var rawBasePath = input.rawBasePath();
+            var basePath = rawBasePath == null || rawBasePath.isBlank() ? workspace : confinedPath(workspace, rawBasePath);
             if (!Files.exists(basePath)) return new Output("content", 0, List.of(), "Path does not exist: " + basePath, 0, 0, false);
             var pattern = Pattern.compile(input.pattern(), Boolean.TRUE.equals(input.caseInsensitive()) ? Pattern.CASE_INSENSITIVE : 0);
             var mode = input.outputMode() == null ? "files_with_matches" : input.outputMode();
@@ -549,11 +551,15 @@ public final class CoderhinoAgent {
                 return matcher.matches(relative) || matcher.matches(path.getFileName());
             } catch (Exception e) { return true; }
         }
-        record Input(String pattern, String basePath, String glob,
+        record Input(String pattern, String basePath, String path, String glob,
                      @JsonProperty("output_mode") String outputMode,
                      Integer context,
                      @JsonProperty("head_limit") Integer headLimit,
-                     @JsonProperty("case_insensitive") Boolean caseInsensitive) {}
+                     @JsonProperty("case_insensitive") Boolean caseInsensitive) {
+            String rawBasePath() {
+                return basePath == null || basePath.isBlank() ? path : basePath;
+            }
+        }
         record Output(String mode, int numFiles, List<String> filenames, String content, int numLines, int numMatches, boolean truncated) {}
     }
 }

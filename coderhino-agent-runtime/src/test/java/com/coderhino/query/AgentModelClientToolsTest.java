@@ -159,6 +159,27 @@ class AgentModelClientToolsTest {
     }
 
     @Test
+    void buildPayloadReplaysThinkingBeforeToolUse() {
+        List<com.coderhino.types.Message> messages = List.of(
+            new com.coderhino.types.Message.UserMessage("hi"),
+            new com.coderhino.types.Message.AssistantToolUseMessage("{\"pattern\":\"*.java\"}", "glob", "call-1", "assistant-1", "plan"),
+            new com.coderhino.types.Message.ToolResultMessage("AgentModelClient.java", "glob", "call-1")
+        );
+
+        var payload = client.buildPayload(new QueryRequest(messages, "system", null, null, null), false);
+
+        @SuppressWarnings("unchecked")
+        var agenticMessages = (List<Map<String, Object>>) payload.get("messages");
+        assertEquals("assistant", agenticMessages.get(1).get("role"));
+        @SuppressWarnings("unchecked")
+        var content = (List<Map<String, Object>>) agenticMessages.get(1).get("content");
+        assertEquals("thinking", content.get(0).get("type"));
+        assertEquals("plan", content.get(0).get("thinking"));
+        assertEquals("tool_use", content.get(1).get("type"));
+        assertEquals("call-1", content.get(1).get("id"));
+    }
+
+    @Test
     void buildOpenAiPayloadMapsMessagesAndTools() {
         var openAiClient = newOpenAiClient();
         var tools = List.of(
@@ -722,6 +743,7 @@ class AgentModelClientToolsTest {
         assertTrue(response instanceof ModelResponse.ToolRequest toolRequest);
         assertEquals("glob", ((ModelResponse.ToolRequest) response).toolName());
         assertEquals(Map.of("pattern", "*.java"), ((ModelResponse.ToolRequest) response).arguments());
+        assertEquals("plan", ((ModelResponse.ToolRequest) response).thinking());
         assertEquals(List.of("plan"), streamEvents.thinkingDeltas);
         assertEquals(List.of(new ToolInputDelta("glob", "tool-1", "{\"pattern\":"), new ToolInputDelta("glob", "tool-1", "\"*.java\"}")), streamEvents.toolInputDeltas);
         assertTrue(streamEvents.usageSnapshots.contains(new UsageSnapshot(9, 0, 0, 0)));

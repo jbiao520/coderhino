@@ -188,6 +188,7 @@ class CoderhinoAgentTest {
         var modelClient = new SequentialToolModelClient(List.of(
             new ModelResponse.ToolRequest("grep", Map.of(
                 "pattern", "sk-ant",
+                "path", "secrets.txt",
                 "output_mode", "content",
                 "head_limit", 10,
                 "case_insensitive", true
