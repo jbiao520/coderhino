@@ -15,6 +15,10 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 @AutoConfiguration
 @EnableConfigurationProperties(CoderhinoAgentProperties.class)
 public class CoderhinoAgentAutoConfiguration {
@@ -50,9 +54,9 @@ public class CoderhinoAgentAutoConfiguration {
         var provider = credentialProvider.getIfAvailable();
         var apiKey = firstNonBlank(
             provider != null ? provider.apiKey() : null,
-            properties.getApiKey(),
-            environment.getProperty("CODERHINO_AGENT_API_KEY"),
-            environment.getProperty("ANTHROPIC_API_KEY")
+            resolveApiKeyValue(properties.getApiKey(), "coderhino.agent.api-key"),
+            resolveApiKeyValue(environment.getProperty("CODERHINO_AGENT_API_KEY"), "CODERHINO_AGENT_API_KEY"),
+            resolveApiKeyValue(environment.getProperty("ANTHROPIC_API_KEY"), "ANTHROPIC_API_KEY")
         );
         if (apiKey == null) {
             throw new IllegalStateException(
@@ -115,6 +119,26 @@ public class CoderhinoAgentAutoConfiguration {
             }
         }
         return null;
+    }
+
+    private static String resolveApiKeyValue(String value, String sourceName) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+
+        Path candidatePath = Path.of(value.trim());
+        if (!Files.isRegularFile(candidatePath)) {
+            return value;
+        }
+
+        try {
+            return Files.readString(candidatePath).trim();
+        } catch (IOException exception) {
+            throw new IllegalStateException(
+                "Failed to read Model API credentials from file configured by " + sourceName + ": " + candidatePath,
+                exception
+            );
+        }
     }
 
     private static String resolveApiBaseUrl(CoderhinoAgentProperties properties) {

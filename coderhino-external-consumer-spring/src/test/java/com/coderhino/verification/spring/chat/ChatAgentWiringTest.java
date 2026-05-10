@@ -13,6 +13,7 @@ import com.coderhino.verification.spring.ExternalConsumerSpringApplication;
 import com.coderhino.verification.examples.spring.DeterministicFakeModelClient;
 import com.coderhino.verification.examples.spring.HardcodedCredentialProviderConfiguration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,6 +27,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -41,6 +43,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 class ChatAgentWiringTest {
     private static final String DETERMINISTIC_REPLY = "chat endpoint reply";
+
+    @TempDir
+    Path tempDir;
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(CoderhinoAgentAutoConfiguration.class));
@@ -87,7 +92,7 @@ class ChatAgentWiringTest {
         assertThat(toolCommandRegistry.find("commit")).isPresent();
         assertThat(toolCommandRegistry.find("queryOrder")).isNotPresent();
         assertThat(toolCommandRegistry.find("createMock")).isNotPresent();
-        assertThat(credentialProvider.apiKey()).isEqualTo(HardcodedCredentialProviderConfiguration.EXAMPLE_API_KEY);
+        assertThat(credentialProvider.apiKey()).isEqualTo("test-key-from-file");
     }
 
     @Test
@@ -120,11 +125,14 @@ class ChatAgentWiringTest {
     }
 
     @Test
-    void hardcodedCredentialProviderWinsOverPropertyValueForAutoConfiguredModelClient() {
+    void configuredApiKeyFileWinsOverHardcodedCredentialProviderFallback() throws Exception {
+        Path apiKeyFile = tempDir.resolve("api-key.txt");
+        Files.writeString(apiKeyFile, "file-backed-key\n");
+
         contextRunner
             .withUserConfiguration(ChatAgentConfiguration.class, HardcodedCredentialProviderConfiguration.ProviderBeanConfiguration.class)
             .withPropertyValues(
-                "coderhino.agent.api-key=file-should-not-win",
+                "coderhino.agent.api-key=" + apiKeyFile,
                 "coderhino.agent.api-base-url=https://api.openai.example/v1",
                 "coderhino.agent.provider-api-type=OPENAI",
                 "coderhino.agent.model=test-model-from-file",
@@ -134,12 +142,12 @@ class ChatAgentWiringTest {
             .run(context -> {
                 assertThat(context).hasSingleBean(CoderhinoAgentCredentialProvider.class);
                 assertThat(context.getBean(CoderhinoAgentCredentialProvider.class).apiKey())
-                    .isEqualTo(HardcodedCredentialProviderConfiguration.EXAMPLE_API_KEY);
+                    .isEqualTo("file-backed-key");
 
                 assertThat(context).hasSingleBean(ModelClient.class);
                 assertThat(context.getBean(ModelClient.class)).isInstanceOf(AgentModelClient.class);
                 assertThat(modelClientApiKey(context.getBean(ModelClient.class)))
-                    .isEqualTo(HardcodedCredentialProviderConfiguration.EXAMPLE_API_KEY);
+                    .isEqualTo("file-backed-key");
             });
     }
 

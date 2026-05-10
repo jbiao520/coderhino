@@ -27,6 +27,8 @@ coderhino.agent.api-base-url=https://api.openai.com/v1
 coderhino.agent.api-key=replace-with-your-api-key
 ```
 
+`coderhino.agent.api-key` may be either the real key value or a path to a local file that contains the key. When the configured value points to an existing regular file, the Spring auto-configuration reads that file and uses its trimmed contents as the key.
+
 Default credential resolution for the Spring auto-configured `ModelClient` is:
 
 1. host-provided `ModelClient` bean, full override path

@@ -7,7 +7,6 @@ import com.coderhino.query.ModelClient;
 import com.coderhino.tools.ToolDefinition;
 import com.coderhino.tools.ToolRegistry;
 import com.coderhino.tools.runtime.ToolCommandRegistry;
-import com.coderhino.verification.examples.spring.HardcodedCredentialProviderConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -78,7 +77,7 @@ class ExternalConsumerSpringApplicationTest {
         assertThat(webApplicationContext).isNotNull();
         assertThat(fakeModelClient.requestCount()).isZero();
         assertThat(fakeModelClient.lastRequest()).isNull();
-        assertThat(credentialProvider.apiKey()).isEqualTo(HardcodedCredentialProviderConfiguration.EXAMPLE_API_KEY);
+        assertThat(credentialProvider.apiKey()).isEqualTo("test-key-from-file");
         assertThat(agent.config().toolRegistry()).isSameAs(toolRegistry);
         assertThat(agent.config().toolRegistry().all())
             .extracting(ToolDefinition::name)

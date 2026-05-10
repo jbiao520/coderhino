@@ -234,7 +234,7 @@ This matches `CoderhinoAgentProperties` plus current auto-config wiring.
 | `coderhino.agent.max-tool-iterations` | `int` | `200` | Yes | Sets the agent iteration limit. |
 | `coderhino.agent.max-budget-usd` | `double` | `0.0` | Yes | Sets the agent budget limit. |
 | `coderhino.agent.embedded-integrations-enabled` | `boolean` | `false` | Present, not wired | Bindable, but current auto-config does not consume it. |
-| `coderhino.agent.api-key` | `String` | `null` | Yes | Used by the default `ModelClient` after any `CoderhinoAgentCredentialProvider` bean and before direct env fallbacks. |
+| `coderhino.agent.api-key` | `String` | `null` | Yes | Used by the default `ModelClient` after any `CoderhinoAgentCredentialProvider` bean and before direct env fallbacks. The value may be a real key or a path to an existing regular file whose trimmed contents are the key. |
 | `coderhino.agent.api-base-url` | `String` | provider default when omitted | Yes | Passed to the default `ModelClient`. Explicit values win. Omitted values follow `provider-api-type`. |
 | `coderhino.agent.provider-api-type` | `ProviderApiType` | `CLAUDE_CODE` | Yes | Passed to the default `ModelClientFactory` and used to select the default base URL when `api-base-url` is omitted. |
 | `coderhino.agent.context-window` | `long` | `128000` | Yes | Passed to the default `ModelClientFactory`. |
@@ -410,13 +410,14 @@ Use one of these supported paths for the default Spring auto-configured `ModelCl
 | --- | --- | --- |
 | 1 | custom `ModelClient` bean | Full override path. Spring does not create the default `ModelClient`. |
 | 2 | `CoderhinoAgentCredentialProvider` bean | Best fit when a host secret service owns the credential. |
-| 3 | `coderhino.agent.api-key` or direct `CODERHINO_AGENT_API_KEY` | Main property-driven path. `application.properties` is the checked-in example. |
+| 3 | `coderhino.agent.api-key` or direct `CODERHINO_AGENT_API_KEY` | Main property-driven path. `application.properties` is the checked-in example. Each value may be a real key or a path to an existing regular file whose trimmed contents are the key. |
 | 4 | `ANTHROPIC_API_KEY` | Fallback used by the current default auto-configured `ModelClient`. |
 | 5 | fail | Throws a startup error with configuration guidance. |
 
 Notes that matter:
 
 - `CODERHINO_AGENT_API_KEY` is valid both as Spring-style environment binding for `coderhino.agent.api-key` and as a direct fallback lookup in the current auto-config.
+- `coderhino.agent.api-key`, direct `CODERHINO_AGENT_API_KEY`, and `ANTHROPIC_API_KEY` values are treated as file paths only when they point to an existing regular file; otherwise the value is used as the literal key.
 - Bare `OPENAI_API_KEY` is not part of the default Spring auto-config credential order.
 - If `coderhino.agent.api-base-url` is absent, the default base URL comes from `coderhino.agent.provider-api-type`.
 - Use a custom `ModelClient` if your host needs a different secret source or a different provider contract.

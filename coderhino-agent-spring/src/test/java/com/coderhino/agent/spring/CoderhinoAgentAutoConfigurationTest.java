@@ -13,6 +13,7 @@ import com.coderhino.tools.ToolRegistry;
 import com.coderhino.tools.runtime.ToolCommandRegistry;
 import com.coderhino.types.PermissionMode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -21,13 +22,17 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 import java.lang.reflect.Field;
-
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class CoderhinoAgentAutoConfigurationTest {
+    @TempDir
+    Path tempDir;
+
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(CoderhinoAgentAutoConfiguration.class));
 
@@ -110,6 +115,31 @@ class CoderhinoAgentAutoConfigurationTest {
                 assertThat(context.getStartupFailure()).isNull();
                 assertThat(context).hasSingleBean(ModelClient.class);
                 assertThat(extractApiKey(context.getBean(ModelClient.class))).isEqualTo("property-key");
+            });
+    }
+
+    @Test
+    void coderhinoAgentApiKeyPropertyCanPointToFile() throws Exception {
+        Path apiKeyFile = tempDir.resolve("api-key.txt");
+        Files.writeString(apiKeyFile, " file-backed-key \n");
+
+        contextRunner
+            .withPropertyValues("coderhino.agent.api-key=" + apiKeyFile)
+            .run(context -> {
+                assertThat(context.getStartupFailure()).isNull();
+                assertThat(context).hasSingleBean(ModelClient.class);
+                assertThat(extractApiKey(context.getBean(ModelClient.class))).isEqualTo("file-backed-key");
+            });
+    }
+
+    @Test
+    void nonFileCoderhinoAgentApiKeyPropertyIsUsedAsLiteralKey() {
+        contextRunner
+            .withPropertyValues("coderhino.agent.api-key=literal-key")
+            .run(context -> {
+                assertThat(context.getStartupFailure()).isNull();
+                assertThat(context).hasSingleBean(ModelClient.class);
+                assertThat(extractApiKey(context.getBean(ModelClient.class))).isEqualTo("literal-key");
             });
     }
 
