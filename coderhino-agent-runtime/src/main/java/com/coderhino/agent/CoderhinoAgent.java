@@ -18,6 +18,7 @@ import com.coderhino.types.Message;
 import com.coderhino.types.PermissionMode;
 import com.coderhino.types.PermissionResult;
 import com.coderhino.types.ToolInputSchema;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -548,7 +549,11 @@ public final class CoderhinoAgent {
                 return matcher.matches(relative) || matcher.matches(path.getFileName());
             } catch (Exception e) { return true; }
         }
-        record Input(String pattern, String basePath, String glob, String outputMode, Integer context, Integer headLimit, Boolean caseInsensitive) {}
+        record Input(String pattern, String basePath, String glob,
+                     @JsonProperty("output_mode") String outputMode,
+                     Integer context,
+                     @JsonProperty("head_limit") Integer headLimit,
+                     @JsonProperty("case_insensitive") Boolean caseInsensitive) {}
         record Output(String mode, int numFiles, List<String> filenames, String content, int numLines, int numMatches, boolean truncated) {}
     }
 }

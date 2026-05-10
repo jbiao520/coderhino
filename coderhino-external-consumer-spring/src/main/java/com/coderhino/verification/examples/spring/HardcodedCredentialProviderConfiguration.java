@@ -10,7 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class HardcodedCredentialProviderConfiguration {
-    public static final String EXAMPLE_API_KEY = "sk-omTdJ1LhU2qcqU3SqsZeN7_7oqdUOVawJuXbfD-akkuwZz6R217eJmrhZ9GtBt-k27oys6zcY7tVNo";
+    public static final String EXAMPLE_API_KEY = "sk-";
     private static final String PLACEHOLDER_API_KEY = "replace-with-your-api-key";
 
     private HardcodedCredentialProviderConfiguration() {

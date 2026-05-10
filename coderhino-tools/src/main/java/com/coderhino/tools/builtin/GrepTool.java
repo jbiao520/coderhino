@@ -4,6 +4,7 @@ import com.coderhino.tools.ToolContext;
 import com.coderhino.tools.ToolDefinition;
 import com.coderhino.types.PermissionResult;
 import com.coderhino.types.ToolInputSchema;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -247,8 +248,11 @@ public final class GrepTool implements ToolDefinition<GrepTool.Input, GrepTool.O
         return Path.of(context.bootstrapState().cwd()).resolve(path).normalize();
     }
 
-    public record Input(String pattern, String basePath, String glob, String outputMode,
-                        Integer context, Integer headLimit, Boolean caseInsensitive) {
+    public record Input(String pattern, String basePath, String glob,
+                        @JsonProperty("output_mode") String outputMode,
+                        Integer context,
+                        @JsonProperty("head_limit") Integer headLimit,
+                        @JsonProperty("case_insensitive") Boolean caseInsensitive) {
     }
 
     public record Output(String mode, int numFiles, List<String> filenames, String content,
